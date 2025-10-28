@@ -23,8 +23,12 @@ model Country {
   updatedAt   DateTime @updatedAt
 
   // Relacionamentos
-  imports     Import[]
+  imports     Import[] @relation("ImportCountry")
+  originImports     Import[] @relation("OriginCountry")
+  acquisitionImports Import[] @relation("AcquisitionCountry")
   states      State[]
+  companies   Company[]
+  agencies    Agency[]
 
   @@map("countries")
 }
@@ -164,7 +168,7 @@ model Import {
   updatedAt           DateTime  @updatedAt
   
   // Relacionamentos
-  country             Country   @relation(fields: [countryId], references: [id])
+  country             Country   @relation("ImportCountry", fields: [countryId], references: [id])
   state               State?    @relation(fields: [stateId], references: [id])
   product             Product   @relation(fields: [productId], references: [id])
   company             Company   @relation(fields: [companyId], references: [id])
