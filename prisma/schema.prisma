@@ -1,0 +1,219 @@
+// Schema Prisma - Modelo Relacional Normalizado (3FN)
+// API GQCorp - Dados de Importação Brasil, Peru, Chile
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ===== TABELAS DE DOMÍNIO (NORMALIZADAS) =====
+
+// Países - Tabela de referência
+model Country {
+  id          Int    @id @default(autoincrement())
+  code        String @unique @db.VarChar(2) // BR, PE, CH
+  name        String @db.VarChar(100)
+  fullName    String @db.VarChar(200)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relacionamentos
+  imports     Import[]
+  states      State[]
+
+  @@map("countries")
+}
+
+// Estados/Regiões - Normalizado por país
+model State {
+  id          Int    @id @default(autoincrement())
+  code        String @db.VarChar(10)
+  name        String @db.VarChar(100)
+  countryId   Int
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relacionamentos
+  country     Country @relation(fields: [countryId], references: [id])
+  imports     Import[]
+
+  @@unique([code, countryId])
+  @@map("states")
+}
+
+// Produtos/NCM/Partidas Arancelárias - Normalizado
+model Product {
+  id              Int    @id @default(autoincrement())
+  code            String @unique @db.VarChar(20) // NCM, Partida Arancelária
+  description     String @db.Text
+  commercialDesc  String? @db.Text
+  category        String? @db.VarChar(100)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  // Relacionamentos
+  imports         Import[]
+
+  @@map("products")
+}
+
+// Empresas/Importadores - Normalizado
+model Company {
+  id          Int    @id @default(autoincrement())
+  document    String @db.VarChar(50) // CNPJ, RUC, etc
+  name        String @db.VarChar(500)
+  countryId   Int
+  type        CompanyType @default(IMPORTER)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relacionamentos
+  country     Country @relation(fields: [countryId], references: [id])
+  imports     Import[]
+
+  @@unique([document, countryId])
+  @@map("companies")
+}
+
+// Agências/Órgãos - Normalizado
+model Agency {
+  id          Int    @id @default(autoincrement())
+  code        String @db.VarChar(20)
+  name        String @db.VarChar(200)
+  countryId   Int
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relacionamentos
+  country     Country @relation(fields: [countryId], references: [id])
+  imports     Import[]
+
+  @@unique([code, countryId])
+  @@map("agencies")
+}
+
+// ===== TABELA PRINCIPAL DE IMPORTAÇÕES =====
+
+model Import {
+  id                  Int       @id @default(autoincrement())
+  
+  // Identificação da operação
+  declarationNumber   String    @db.VarChar(50)
+  series              String?   @db.VarChar(20)
+  operationDate       DateTime?
+  numerationDate      String?   @db.VarChar(20) // fecNumeracao formato original
+  
+  // Relacionamentos normalizados
+  countryId           Int
+  stateId             Int?
+  productId           Int
+  companyId           Int
+  agencyId            Int?
+  originCountryId     Int?
+  acquisitionCountryId Int?
+  
+  // Valores financeiros (USD)
+  fobUsd              Decimal?  @db.Decimal(15,2)
+  freightUsd          Decimal?  @db.Decimal(15,2)
+  insuranceUsd        Decimal?  @db.Decimal(15,2)
+  cifUsd              Decimal?  @db.Decimal(15,2)
+  
+  // Valores financeiros locais
+  fobLocal            Decimal?  @db.Decimal(15,2)
+  freightLocal        Decimal?  @db.Decimal(15,2)
+  insuranceLocal      Decimal?  @db.Decimal(15,2)
+  
+  // Impostos e taxas
+  adValorem           Decimal?  @db.Decimal(15,2)
+  igv                 Decimal?  @db.Decimal(15,2)
+  isc                 Decimal?  @db.Decimal(15,2)
+  ipm                 Decimal?  @db.Decimal(15,2)
+  specialRights       Decimal?  @db.Decimal(15,2)
+  previousRights      Decimal?  @db.Decimal(15,2)
+  additionalIpm       Decimal?  @db.Decimal(15,2)
+  
+  // Quantidades e pesos
+  netWeight           Decimal?  @db.Decimal(15,3)
+  netWeight2          Decimal?  @db.Decimal(15,3)
+  quantity            Decimal?  @db.Decimal(15,3)
+  packages            Int?
+  
+  // Unidades e medidas
+  unit                String?   @db.VarChar(20)
+  
+  // Descrições adicionais
+  presentationDesc    String?   @db.Text
+  materialDesc        String?   @db.Text
+  useDesc             String?   @db.Text
+  othersDesc          String?   @db.Text
+  
+  // Controle e canal
+  channel             String?   @db.VarChar(20)
+  warehouse           String?   @db.VarChar(100)
+  commodity           String?   @db.VarChar(50)
+  
+  // Metadados
+  dataSource          DataSource
+  rawData             Json?     // JSON original para auditoria
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  
+  // Relacionamentos
+  country             Country   @relation(fields: [countryId], references: [id])
+  state               State?    @relation(fields: [stateId], references: [id])
+  product             Product   @relation(fields: [productId], references: [id])
+  company             Company   @relation(fields: [companyId], references: [id])
+  agency              Agency?   @relation(fields: [agencyId], references: [id])
+  originCountry       Country?  @relation("OriginCountry", fields: [originCountryId], references: [id])
+  acquisitionCountry  Country?  @relation("AcquisitionCountry", fields: [acquisitionCountryId], references: [id])
+
+  @@index([countryId, operationDate])
+  @@index([productId, operationDate])
+  @@index([companyId, operationDate])
+  @@index([declarationNumber, countryId])
+  @@map("imports")
+}
+
+// ===== TABELA DE CONSULTAS/EXECUÇÕES =====
+
+model QueryExecution {
+  id            Int       @id @default(autoincrement())
+  countryCode   String    @db.VarChar(2)
+  queryType     String    @db.VarChar(50)
+  parameters    Json      // Parâmetros da consulta
+  totalRecords  Int
+  executionTime Int       // em milissegundos
+  status        QueryStatus
+  errorMessage  String?   @db.Text
+  createdAt     DateTime  @default(now())
+
+  @@index([countryCode, createdAt])
+  @@map("query_executions")
+}
+
+// ===== ENUMS =====
+
+enum CompanyType {
+  IMPORTER
+  EXPORTER
+  AGENCY
+  OTHER
+}
+
+enum DataSource {
+  COMEXSTAT    // Brasil
+  ADUANET      // Peru
+  CKAN_CHILE   // Chile
+}
+
+enum QueryStatus {
+  SUCCESS
+  ERROR
+  TIMEOUT
+  PARTIAL
+}
