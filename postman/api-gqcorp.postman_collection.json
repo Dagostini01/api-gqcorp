@@ -1,0 +1,152 @@
+{
+  "info": {
+    "name": "API GQCorp",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "GET /health",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "http://localhost:3000/health",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "3000",
+          "path": ["health"]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status code is 200', function () {",
+              "  pm.response.to.have.status(200);",
+              "});",
+              "pm.test('Response has status ok', function () {",
+              "  var json = pm.response.json();",
+              "  pm.expect(json.status).to.eql('ok');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "POST /peru/importar",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"cnpj\": \"20100860351\",\n  \"data_de\": \"2025-01-01\",\n  \"data_ate\": \"2025-01-30\",\n  \"limit\": 100\n}"
+        },
+        "url": {
+          "raw": "http://localhost:3000/peru/importar",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "3000",
+          "path": ["peru", "importar"]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status code is 200', function () {",
+              "  pm.response.to.have.status(200);",
+              "});",
+              "pm.test('Response has total and resultados', function () {",
+              "  var json = pm.response.json();",
+              "  pm.expect(json).to.have.property('total');",
+              "  pm.expect(json).to.have.property('resultados');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "POST /chile/importar",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"ano\": 2025,\n  \"mes\": 1,\n  \"limit\": 100\n}"
+        },
+        "url": {
+          "raw": "http://localhost:3000/chile/importar",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "3000",
+          "path": ["chile", "importar"]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status code is 200', function () {",
+              "  pm.response.to.have.status(200);",
+              "});",
+              "pm.test('Response has total and resultados', function () {",
+              "  var json = pm.response.json();",
+              "  pm.expect(json).to.have.property('total');",
+              "  pm.expect(json).to.have.property('resultados');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "POST /brasil/importar",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"ncm\": \"34021300\",\n  \"data_de\": \"2022-01\",\n  \"data_ate\": \"2022-03\",\n  \"limit\": 100\n}"
+        },
+        "url": {
+          "raw": "http://localhost:3000/brasil/importar",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "3000",
+          "path": ["brasil", "importar"]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status code is 200', function () {",
+              "  pm.response.to.have.status(200);",
+              "});",
+              "pm.test('Response has total and resultados', function () {",
+              "  var json = pm.response.json();",
+              "  pm.expect(json).to.have.property('total');",
+              "  pm.expect(json).to.have.property('resultados');",
+              "});"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}
