@@ -41,7 +41,8 @@ const peruRoutes: FastifyPluginAsync = async (app: FastifyInstance) => {
 
       const where: any = { country: { code: 'PE' } };
       if (cnpj && typeof cnpj === 'string' && cnpj.trim() !== '') {
-        where.company = { document: cnpj.trim() };
+        // Filtro relacional correto para 1:1/Many-to-One no Prisma
+        where.company = { is: { document: { equals: cnpj.trim() } } };
       }
 
       const total = await prisma.import.count({ where });
