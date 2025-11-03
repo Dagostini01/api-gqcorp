@@ -112,20 +112,45 @@ export function transformBrasilData(rawData: BrasilRawData): Partial<ImportData>
  * Converte dados brutos do Peru para o modelo normalizado
  */
 export function transformPeruData(rawData: PeruRawData): Partial<ImportData> {
-  // Extrair data de numeração com regex dd/mm/yyyy de vários campos possíveis
+  // Valores brutos potenciais (variações de nomes)
   const fecRaw = (rawData as any).fecNumeracao || (rawData as any).fecNumeracion || (rawData as any).fecNumerac || (rawData as any).fec;
-  const fecMatch = typeof fecRaw === 'string' ? fecRaw.match(/(\d{2}\/\d{2}\/\d{4})/) : null;
-  const numerationDate = fecMatch ? fecMatch[1] : undefined;
-
-  // Série: normaliza e limita
   const seriesRaw = (rawData as any).series ?? (rawData as any).serie;
+  let declaracaoRaw = (rawData as any).declaracao;
+
+  // Heurística: algumas linhas vêm com cabeçalho na coluna "declaracao" e valores deslocados
+  const headerRegex = /Declaraci[oó]n\s+Importador\s+Fec\.\s+Numeraci[oó]n\s+Agencia\s+Ser/i;
+  const looksLikeHeader = typeof declaracaoRaw === 'string' && headerRegex.test(declaracaoRaw);
+
+  // Se parecer cabeçalho, realinha: usa fecRaw como declaração se tiver formato de DUI, e série como data
+  const duiRegex = /^\d{3}-\d{2}-\d{6}$/; // Ex.: 118-25-000880
+  let declarationNumberFinal: string | undefined;
+  let numerationDateFromSeries: string | undefined;
+  if (looksLikeHeader) {
+    if (typeof fecRaw === 'string' && duiRegex.test(fecRaw)) {
+      declarationNumberFinal = fecRaw;
+    }
+    if (typeof seriesRaw === 'string') {
+      const m = seriesRaw.match(/(\d{2}\/\d{2}\/\d{4})/);
+      if (m) numerationDateFromSeries = m[1];
+    }
+  }
+
+  // Extrair data de numeração com regex dd/mm/yyyy de vários campos possíveis
+  const fecMatch = typeof fecRaw === 'string' ? fecRaw.match(/(\d{2}\/\d{2}\/\d{4})/) : null;
+  const numerationDate = numerationDateFromSeries || (fecMatch ? fecMatch[1] : undefined);
+
+  // Série: normaliza e limita (se a série for na verdade uma data, não usar como série)
   let seriesSan = typeof seriesRaw === 'string' ? seriesRaw.trim() : undefined;
+  if (seriesSan && /^(\d{2}\/\d{2}\/\d{4})$/.test(seriesSan)) {
+    // Isso é uma data, então deixa somente em numerationDate
+    seriesSan = undefined;
+  }
   if (seriesSan) {
     // Mantém apenas alfanuméricos e limita a 20
     seriesSan = seriesSan.replace(/[^A-Za-z0-9]/g, '').slice(0, 20) || undefined;
   }
-  if (!seriesSan && typeof (rawData as any).declaracao === 'string') {
-    // Fallback: tenta extrair token alfanumérico curto da declaração
+  if (!seriesSan && typeof (rawData as any).declaracao === 'string' && !looksLikeHeader) {
+    // Fallback: tenta extrair token alfanumérico curto da declaração se não for cabeçalho
     const m = (rawData as any).declaracao.match(/[A-Za-z0-9]{1,20}/);
     seriesSan = m ? m[0] : undefined;
   }
@@ -142,8 +167,11 @@ export function transformPeruData(rawData: PeruRawData): Partial<ImportData> {
     }
   }
 
+  // Declaração: usa realinhamento se aplicável, senão o valor bruto
+  const declarationNumber = declarationNumberFinal || declaracaoRaw;
+
   return {
-    declarationNumber: rawData.declaracao,
+    declarationNumber,
     series: seriesSan,
     numerationDate: numerationDateFinal,
     // Prefere ano_ref/mes_ref para Peru, cai para data extraída da numeração
