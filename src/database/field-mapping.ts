@@ -114,8 +114,35 @@ export function transformBrasilData(rawData: BrasilRawData): Partial<ImportData>
 export function transformPeruData(rawData: PeruRawData): Partial<ImportData> {
   return {
     declarationNumber: rawData.declaracao,
-    fobUsd: parseDecimal(rawData.fobUsd),
-    operationDate: parseDate(rawData.ano_ref, rawData.mes_ref),
+    series: (rawData as any).series || (rawData as any).serie,
+    numerationDate: (rawData as any).fecNumeracao,
+    operationDate: parseDateFromFecNumeracao((rawData as any).fecNumeracao) || parseDate((rawData as any).ano_ref, (rawData as any).mes_ref),
+    // Valores monetários
+    fobUsd: parseDecimal((rawData as any).fobUsd ?? (rawData as any).fob),
+    freightUsd: parseDecimal((rawData as any).fleteUsd ?? (rawData as any).flete),
+    insuranceUsd: parseDecimal((rawData as any).seguro ?? (rawData as any).seguro2),
+    cifUsd: parseDecimal((rawData as any).cif),
+    adValorem: parseDecimal((rawData as any).adv),
+    igv: parseDecimal((rawData as any).igv),
+    isc: parseDecimal((rawData as any).isc),
+    ipm: parseDecimal((rawData as any).ipm),
+    specialRights: parseDecimal((rawData as any).derEsp),
+    previousRights: parseDecimal((rawData as any).derAnt),
+    additionalIpm: parseDecimal((rawData as any).ipmAdic),
+    // Pesos e quantidades
+    netWeight: parseDecimal((rawData as any).pesoNeto),
+    netWeight2: parseDecimal((rawData as any).pesoNeto2),
+    quantity: parseDecimal((rawData as any).quantidade),
+    packages: parseDecimal((rawData as any).nroBultos),
+    unit: (rawData as any).unid,
+    // Descrições e outros
+    presentationDesc: (rawData as any).descPresent,
+    materialDesc: (rawData as any).descMatConst,
+    useDesc: (rawData as any).descUso,
+    othersDesc: (rawData as any).descOutros,
+    channel: (rawData as any).canal,
+    warehouse: (rawData as any).armazen,
+    commodity: (rawData as any).commod,
     dataSource: 'ADUANET',
   };
 }

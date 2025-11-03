@@ -160,6 +160,48 @@
       "name": "Peru",
       "item": [
         {
+          "name": "GET /peru (paginação e filtro NCM)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "http://localhost:3000/peru?page=1&pageSize=5&ncm=39059990",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3000",
+              "path": ["peru"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "pageSize", "value": "5" },
+                { "key": "ncm", "value": "39059990" }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Response has pagination metadata', function () {",
+                  "  var json = pm.response.json();",
+                  "  pm.expect(json).to.have.property('total');",
+                  "  pm.expect(json).to.have.property('page');",
+                  "  pm.expect(json).to.have.property('pageSize');",
+                  "  pm.expect(json).to.have.property('totalPages');",
+                  "  pm.expect(json).to.have.property('resultados');",
+                  "  pm.expect(json.page).to.be.a('number');",
+                  "  pm.expect(json.pageSize).to.be.a('number');",
+                  "  pm.expect(json.resultados.length).to.be.at.most(json.pageSize);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
           "name": "POST /peru/importar",
           "request": {
             "method": "POST",
@@ -187,10 +229,11 @@
                   "pm.test('Status code is 200', function () {",
                   "  pm.response.to.have.status(200);",
                   "});",
-                  "pm.test('Response has total and resultados', function () {",
+                  "pm.test('Response has total and persisted only (no resultados)', function () {",
                   "  var json = pm.response.json();",
                   "  pm.expect(json).to.have.property('total');",
-                  "  pm.expect(json).to.have.property('resultados');",
+                  "  pm.expect(json).to.have.property('persisted');",
+                  "  pm.expect(json.resultados).to.eql(undefined);",
                   "});"
                 ]
               }

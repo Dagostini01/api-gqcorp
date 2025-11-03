@@ -23,6 +23,7 @@ export class DataTransformer {
   private stateCache = new Map<string, number>();
   private productCache = new Map<string, number>();
   private companyCache = new Map<string, number>();
+  private agencyCache = new Map<string, number>();
 
   constructor() {
     this.prisma = new PrismaClient();
@@ -122,8 +123,11 @@ export class DataTransformer {
         // Resolver relacionamentos
         const countryId = await this.resolveCountry(rawData.country_code);
         const stateId = await this.resolveState(rawData.state, countryId);
-        const productId = await this.resolveProduct(rawData.partida);
+        const productId = await this.resolveProduct(rawData.partida, (rawData as any).descComer);
         const companyId = await this.resolveCompany(rawData.importador, rawData.importador, countryId);
+        const originCountryId = await this.resolveOriginCountry((rawData as any).paisOrig);
+        const acquisitionCountryId = await this.resolveOriginCountry((rawData as any).paisAdq);
+        const agencyId = await this.resolveAgency((rawData as any).agencia, countryId);
 
         // Criar registro de importação
         await this.prisma.import.create({
@@ -133,6 +137,9 @@ export class DataTransformer {
             stateId,
             productId,
             companyId,
+            originCountryId,
+            acquisitionCountryId,
+            agencyId,
             rawData: SAVE_RAW_DATA ? rawData : undefined,
           } as any,
         });
@@ -280,21 +287,35 @@ export class DataTransformer {
    * Resolve ou cria empresa por documento e país (com cache)
    */
   private async resolveCompany(document: string, name: string, countryId: number): Promise<number> {
-    const cacheKey = `${document}-${countryId}`;
-    
+    // Sanitização de documento e nome segundo limites do schema
+    const sanitizeDocument = (doc: string) => {
+      const digits = (doc || '').replace(/\D+/g, '');
+      const alnum = digits || (doc || '').replace(/[^A-Za-z0-9]/g, '');
+      const result = (alnum || 'UNKNOWN').slice(0, 50);
+      return result || 'UNKNOWN';
+    };
+    const sanitizeName = (nm: string, fallbackDoc: string) => {
+      const base = (nm || '').trim() || fallbackDoc || 'UNKNOWN';
+      return base.length > 500 ? base.slice(0, 500) : base;
+    };
+
+    const docSan = sanitizeDocument(document);
+    const nameSan = sanitizeName(name, docSan);
+
+    const cacheKey = `${docSan}-${countryId}`;
     if (this.companyCache.has(cacheKey)) {
       return this.companyCache.get(cacheKey)!;
     }
 
     let company = await this.prisma.company.findFirst({
-      where: { document, countryId }
+      where: { document: docSan, countryId }
     });
 
     if (!company) {
       company = await this.prisma.company.create({
         data: {
-          document,
-          name,
+          document: docSan,
+          name: nameSan,
           countryId,
           type: 'IMPORTER',
         }
@@ -310,6 +331,10 @@ export class DataTransformer {
    */
   private async resolveOriginCountry(originCountry: string): Promise<number | null> {
     if (!originCountry) return null;
+    const trimmed = (originCountry || '').trim();
+    if (trimmed === '' || trimmed === '0' || trimmed === '00') {
+      return null;
+    }
 
     // Mapeamento de nomes para códigos
     const countryMapping: { [key: string]: string } = {
@@ -338,6 +363,35 @@ export class DataTransformer {
       });
       return country.id;
     }
+  }
+
+  /**
+   * Resolve ou cria agência por código e país (com cache)
+   */
+  private async resolveAgency(agencyCode?: string, countryId?: number): Promise<number | null> {
+    const code = (agencyCode || '').trim();
+    if (!code || !countryId) return null;
+    const cacheKey = `${code}-${countryId}`;
+    if (this.agencyCache.has(cacheKey)) {
+      return this.agencyCache.get(cacheKey)!;
+    }
+
+    let agency = await this.prisma.agency.findFirst({
+      where: { code, countryId }
+    });
+
+    if (!agency) {
+      agency = await this.prisma.agency.create({
+        data: {
+          code,
+          name: code,
+          countryId,
+        }
+      });
+    }
+
+    this.agencyCache.set(cacheKey, agency.id);
+    return agency.id;
   }
 
   /**
