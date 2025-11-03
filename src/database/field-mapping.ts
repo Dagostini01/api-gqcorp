@@ -125,6 +125,9 @@ export function transformPeruData(rawData: PeruRawData): Partial<ImportData> {
   const duiRegex = /^\d{3}-\d{2}-\d{6}$/; // Ex.: 118-25-000880
   let declarationNumberFinal: string | undefined;
   let numerationDateFromSeries: string | undefined;
+  let paisOrigRealigned: string | undefined;
+  let paisAdqRealigned: string | undefined;
+  
   if (looksLikeHeader) {
     if (typeof fecRaw === 'string' && duiRegex.test(fecRaw)) {
       declarationNumberFinal = fecRaw;
@@ -132,6 +135,25 @@ export function transformPeruData(rawData: PeruRawData): Partial<ImportData> {
     if (typeof seriesRaw === 'string') {
       const m = seriesRaw.match(/(\d{2}\/\d{2}\/\d{4})/);
       if (m) numerationDateFromSeries = m[1];
+    }
+    
+    // Nos registros com cabeçalho deslocado, paisOrig e paisAdq também estão trocados
+    // Tentar encontrar códigos de país válidos nos campos corretos
+    const possibleCountries = [
+      (rawData as any).paisOrig, (rawData as any).paisAdq, 
+      (rawData as any).paisOrigName, (rawData as any).paisAdqName
+    ];
+    
+    for (const field of possibleCountries) {
+      if (typeof field === 'string') {
+        // Procurar por códigos de país de 2-3 letras ou números válidos
+        const countryMatch = field.match(/^[A-Z]{2,3}$|^\d{1,3}$/);
+        if (countryMatch && !paisOrigRealigned) {
+          paisOrigRealigned = field;
+        } else if (countryMatch && !paisAdqRealigned) {
+          paisAdqRealigned = field;
+        }
+      }
     }
   }
 
@@ -170,12 +192,19 @@ export function transformPeruData(rawData: PeruRawData): Partial<ImportData> {
   // Declaração: usa realinhamento se aplicável, senão o valor bruto
   const declarationNumber = declarationNumberFinal || declaracaoRaw;
 
+  // Países: usa realinhamento se aplicável, senão os valores brutos
+  const originCountryCode = paisOrigRealigned || (rawData as any).paisOrig;
+  const acquisitionCountryCode = paisAdqRealigned || (rawData as any).paisAdq;
+
   return {
     declarationNumber,
     series: seriesSan,
     numerationDate: numerationDateFinal,
     // Prefere ano_ref/mes_ref para Peru, cai para data extraída da numeração
     operationDate: parseDate((rawData as any).ano_ref, (rawData as any).mes_ref) || parseDateFromFecNumeracao(numerationDateFinal),
+    // Países de origem e aquisição (serão resolvidos no data-transformer)
+    originCountryCode,
+    acquisitionCountryCode,
     // Valores monetários
     fobUsd: parseDecimal((rawData as any).fobUsd ?? (rawData as any).fob),
     freightUsd: parseDecimal((rawData as any).fleteUsd ?? (rawData as any).flete),

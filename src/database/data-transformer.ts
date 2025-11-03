@@ -120,13 +120,32 @@ export class DataTransformer {
         // Transformar dados básicos
         const importData = transformPeruData(rawData);
 
+        // Sanitização de comprimento e tipos conforme schema Prisma
+        const limitStr = (v: any, max: number): string | undefined => {
+          if (v === null || v === undefined) return undefined;
+          const s = String(v).trim();
+          if (s === '') return undefined;
+          return s.length > max ? s.slice(0, max) : s;
+        };
+        importData.declarationNumber = limitStr(importData.declarationNumber as any, 50);
+        importData.series = limitStr(importData.series as any, 20);
+        importData.numerationDate = limitStr(importData.numerationDate as any, 20);
+        importData.unit = limitStr(importData.unit as any, 20);
+        importData.channel = limitStr(importData.channel as any, 20);
+        importData.warehouse = limitStr(importData.warehouse as any, 100);
+        importData.commodity = limitStr(importData.commodity as any, 50);
+        if (importData.packages !== undefined && importData.packages !== null) {
+          const n = Number(importData.packages as any);
+          importData.packages = Number.isFinite(n) ? Math.trunc(n) : undefined;
+        }
+
         // Resolver relacionamentos
         const countryId = await this.resolveCountry(rawData.country_code);
         const stateId = await this.resolveState(rawData.state, countryId);
         const productId = await this.resolveProduct(rawData.partida, (rawData as any).descComer);
         const companyId = await this.resolveCompany(rawData.importador, rawData.importador, countryId);
-        const originCountryId = await this.resolveOriginCountry((rawData as any).paisOrig);
-        const acquisitionCountryId = await this.resolveOriginCountry((rawData as any).paisAdq);
+        const originCountryId = await this.resolveOriginCountry((importData as any).originCountryCode);
+        const acquisitionCountryId = await this.resolveOriginCountry((importData as any).acquisitionCountryCode);
         const agencyId = await this.resolveAgency((rawData as any).agencia, countryId);
 
         // Criar registro de importação
