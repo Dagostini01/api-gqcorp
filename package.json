@@ -6,7 +6,9 @@
   "scripts": {
     "dev": "ts-node src/server.ts",
     "build": "tsc",
-    "start": "node dist/server.js"
+    "start": "node dist/server.js",
+    "seed": "ts-node src/database/seed.ts",
+    "check:db": "ts-node src/database/check-connection.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.18.0",

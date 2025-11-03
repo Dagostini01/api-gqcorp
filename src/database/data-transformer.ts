@@ -4,6 +4,7 @@
  */
 
 import { PrismaClient } from '@prisma/client';
+import { SAVE_RAW_DATA } from '../config/env';
 import {
   BrasilRawData,
   PeruRawData,
@@ -94,6 +95,7 @@ export class DataTransformer {
             productId,
             companyId,
             originCountryId,
+            rawData: SAVE_RAW_DATA ? rawData : undefined,
           } as any,
         });
 
@@ -131,6 +133,7 @@ export class DataTransformer {
             stateId,
             productId,
             companyId,
+            rawData: SAVE_RAW_DATA ? rawData : undefined,
           } as any,
         });
 
@@ -168,6 +171,7 @@ export class DataTransformer {
             declarationNumber: 'CHILE-' + Date.now(), // Temporário
             productId: await this.resolveProduct('UNKNOWN'),
             companyId: await this.resolveCompany('UNKNOWN', 'UNKNOWN', countryId),
+            rawData: SAVE_RAW_DATA ? rawData : undefined,
           } as any,
         });
 
@@ -205,13 +209,37 @@ export class DataTransformer {
    */
   private async resolveState(stateCode: string, countryId: number): Promise<number | null> {
     const cacheKey = `${stateCode}-${countryId}`;
-    
     if (this.stateCache.has(cacheKey)) {
       return this.stateCache.get(cacheKey)!;
     }
 
+    const input = (stateCode || '').trim();
+    let codeCandidate = input.toUpperCase();
+
+    // Se vier nome completo (ex.: "São Paulo"), mapeia para código (SP)
+    if (codeCandidate.length > 2) {
+      const normalize = (s: string) => s
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toUpperCase()
+        .trim();
+      const nameToCode: Record<string, string> = {};
+      for (const st of INITIAL_STATES_BRASIL) {
+        nameToCode[normalize(st.name)] = st.code;
+      }
+      const norm = normalize(codeCandidate);
+      codeCandidate = nameToCode[norm] || codeCandidate;
+    }
+
+    // Tenta por código ou por nome (insensitive)
     const state = await this.prisma.state.findFirst({
-      where: { code: stateCode, countryId }
+      where: {
+        countryId,
+        OR: [
+          { code: codeCandidate },
+          { name: { equals: input, mode: 'insensitive' } }
+        ]
+      }
     });
 
     if (state) {

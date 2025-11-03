@@ -5,146 +5,240 @@
   },
   "item": [
     {
-      "name": "GET /health",
-      "request": {
-        "method": "GET",
-        "url": {
-          "raw": "http://localhost:3000/health",
-          "protocol": "http",
-          "host": ["localhost"],
-          "port": "3000",
-          "path": ["health"]
-        }
-      },
-      "event": [
+      "name": "Health",
+      "item": [
         {
-          "listen": "test",
-          "script": {
-            "type": "text/javascript",
-            "exec": [
-              "pm.test('Status code is 200', function () {",
-              "  pm.response.to.have.status(200);",
-              "});",
-              "pm.test('Response has status ok', function () {",
-              "  var json = pm.response.json();",
-              "  pm.expect(json.status).to.eql('ok');",
-              "});"
-            ]
-          }
+          "name": "GET /health",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "http://localhost:3000/health",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3000",
+              "path": ["health"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Response has status ok', function () {",
+                  "  var json = pm.response.json();",
+                  "  pm.expect(json.status).to.eql('ok');",
+                  "});"
+                ]
+              }
+        }
+      ]
+        },
+        {
+          "name": "GET /brasil (paginação e filtro NCM)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "http://localhost:3000/brasil?page=1&pageSize=2&ncm=34021300",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3000",
+              "path": ["brasil"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "pageSize", "value": "2" },
+                { "key": "ncm", "value": "34021300" }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Response has pagination metadata', function () {",
+                  "  var json = pm.response.json();",
+                  "  pm.expect(json).to.have.property('total');",
+                  "  pm.expect(json).to.have.property('page');",
+                  "  pm.expect(json).to.have.property('pageSize');",
+                  "  pm.expect(json).to.have.property('totalPages');",
+                  "  pm.expect(json).to.have.property('resultados');",
+                  "  pm.expect(json.page).to.be.a('number');",
+                  "  pm.expect(json.pageSize).to.be.a('number');",
+                  "  pm.expect(json.resultados.length).to.be.at.most(json.pageSize);",
+                  "});"
+                ]
+              }
+            }
+          ]
         }
       ]
     },
     {
-      "name": "POST /peru/importar",
-      "request": {
-        "method": "POST",
-        "header": [
-          { "key": "Content-Type", "value": "application/json" }
-        ],
-        "body": {
-          "mode": "raw",
-          "raw": "{\n  \"cnpj\": \"20100860351\",\n  \"data_de\": \"2025-01-01\",\n  \"data_ate\": \"2025-01-30\",\n  \"limit\": 100\n}"
-        },
-        "url": {
-          "raw": "http://localhost:3000/peru/importar",
-          "protocol": "http",
-          "host": ["localhost"],
-          "port": "3000",
-          "path": ["peru", "importar"]
-        }
-      },
-      "event": [
+      "name": "Brasil",
+      "item": [
         {
-          "listen": "test",
-          "script": {
-            "type": "text/javascript",
-            "exec": [
-              "pm.test('Status code is 200', function () {",
-              "  pm.response.to.have.status(200);",
-              "});",
-              "pm.test('Response has total and resultados', function () {",
-              "  var json = pm.response.json();",
-              "  pm.expect(json).to.have.property('total');",
-              "  pm.expect(json).to.have.property('resultados');",
-              "});"
-            ]
-          }
+          "name": "GET /brasil",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "http://localhost:3000/brasil",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3000",
+              "path": ["brasil"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Response has total and resultados', function () {",
+                  "  var json = pm.response.json();",
+                  "  pm.expect(json).to.have.property('total');",
+                  "  pm.expect(json).to.have.property('resultados');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /brasil/importar",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ncm\": \"34021300\",\n  \"data_de\": \"2022-01\",\n  \"data_ate\": \"2022-03\",\n  \"limit\": 100\n}"
+            },
+            "url": {
+              "raw": "http://localhost:3000/brasil/importar",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3000",
+              "path": ["brasil", "importar"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Response has total and persisted only (no resultados)', function () {",
+                  "  var json = pm.response.json();",
+                  "  pm.expect(json).to.have.property('total');",
+                  "  pm.expect(json).to.have.property('persisted');",
+                  "  pm.expect(json.resultados).to.eql(undefined);",
+                  "});"
+                ]
+              }
+            }
+          ]
         }
       ]
     },
     {
-      "name": "POST /chile/importar",
-      "request": {
-        "method": "POST",
-        "header": [
-          { "key": "Content-Type", "value": "application/json" }
-        ],
-        "body": {
-          "mode": "raw",
-          "raw": "{\n  \"ano\": 2025,\n  \"mes\": 1,\n  \"limit\": 100\n}"
-        },
-        "url": {
-          "raw": "http://localhost:3000/chile/importar",
-          "protocol": "http",
-          "host": ["localhost"],
-          "port": "3000",
-          "path": ["chile", "importar"]
-        }
-      },
-      "event": [
+      "name": "Peru",
+      "item": [
         {
-          "listen": "test",
-          "script": {
-            "type": "text/javascript",
-            "exec": [
-              "pm.test('Status code is 200', function () {",
-              "  pm.response.to.have.status(200);",
-              "});",
-              "pm.test('Response has total and resultados', function () {",
-              "  var json = pm.response.json();",
-              "  pm.expect(json).to.have.property('total');",
-              "  pm.expect(json).to.have.property('resultados');",
-              "});"
-            ]
-          }
+          "name": "POST /peru/importar",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"cnpj\": \"20100860351\",\n  \"data_de\": \"2025-01-01\",\n  \"data_ate\": \"2025-01-30\",\n  \"limit\": 100\n}"
+            },
+            "url": {
+              "raw": "http://localhost:3000/peru/importar",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3000",
+              "path": ["peru", "importar"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Response has total and resultados', function () {",
+                  "  var json = pm.response.json();",
+                  "  pm.expect(json).to.have.property('total');",
+                  "  pm.expect(json).to.have.property('resultados');",
+                  "});"
+                ]
+              }
+            }
+          ]
         }
       ]
     },
     {
-      "name": "POST /brasil/importar",
-      "request": {
-        "method": "POST",
-        "header": [
-          { "key": "Content-Type", "value": "application/json" }
-        ],
-        "body": {
-          "mode": "raw",
-          "raw": "{\n  \"ncm\": \"34021300\",\n  \"data_de\": \"2022-01\",\n  \"data_ate\": \"2022-03\",\n  \"limit\": 100\n}"
-        },
-        "url": {
-          "raw": "http://localhost:3000/brasil/importar",
-          "protocol": "http",
-          "host": ["localhost"],
-          "port": "3000",
-          "path": ["brasil", "importar"]
-        }
-      },
-      "event": [
+      "name": "Chile",
+      "item": [
         {
-          "listen": "test",
-          "script": {
-            "type": "text/javascript",
-            "exec": [
-              "pm.test('Status code is 200', function () {",
-              "  pm.response.to.have.status(200);",
-              "});",
-              "pm.test('Response has total and resultados', function () {",
-              "  var json = pm.response.json();",
-              "  pm.expect(json).to.have.property('total');",
-              "  pm.expect(json).to.have.property('resultados');",
-              "});"
-            ]
-          }
+          "name": "POST /chile/importar",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ano\": 2025,\n  \"mes\": 1,\n  \"limit\": 100\n}"
+            },
+            "url": {
+              "raw": "http://localhost:3000/chile/importar",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3000",
+              "path": ["chile", "importar"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Response has total and resultados', function () {",
+                  "  var json = pm.response.json();",
+                  "  pm.expect(json).to.have.property('total');",
+                  "  pm.expect(json).to.have.property('resultados');",
+                  "});"
+                ]
+              }
+            }
+          ]
         }
       ]
     }

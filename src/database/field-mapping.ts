@@ -8,6 +8,8 @@
 export interface BrasilRawData {
   country_code: string;
   state: string;
+  // Série enviada pelo robô (ex.: "BR")
+  serie?: string;
   ano_ref: string;
   mes_ref: string;
   importador: string;
@@ -93,15 +95,16 @@ export const FIELD_MAPPING = {
 export function transformBrasilData(rawData: BrasilRawData): Partial<ImportData> {
   return {
     declarationNumber: rawData.declaracao,
+    series: rawData.serie,
     numerationDate: rawData.fecNumeracao,
     fobUsd: parseDecimal(rawData.fobUsd),
     freightUsd: parseDecimal(rawData.fleteUsd),
     insuranceUsd: parseDecimal(rawData.seguro),
     cifUsd: parseDecimal(rawData.cif),
     netWeight: parseDecimal(rawData.pesoNeto),
-    operationDate: parseDate(rawData.ano_ref, rawData.mes_ref),
+    // Alguns retornos do Comex não trazem ano_ref/mes_ref; derivamos do fecNumeracao (01/mm/yyyy)
+    operationDate: parseDateFromFecNumeracao(rawData.fecNumeracao) || parseDate(rawData.ano_ref, rawData.mes_ref),
     dataSource: 'COMEXSTAT',
-    rawData: rawData, // Preserva dados originais para auditoria
   };
 }
 
@@ -114,7 +117,6 @@ export function transformPeruData(rawData: PeruRawData): Partial<ImportData> {
     fobUsd: parseDecimal(rawData.fobUsd),
     operationDate: parseDate(rawData.ano_ref, rawData.mes_ref),
     dataSource: 'ADUANET',
-    rawData: rawData,
   };
 }
 
@@ -125,7 +127,6 @@ export function transformChileData(rawData: ChileRawData): Partial<ImportData> {
   return {
     operationDate: parseDate(rawData.ano_ref, rawData.mes_ref),
     dataSource: 'CKAN_CHILE',
-    rawData: rawData,
   };
 }
 
@@ -192,11 +193,16 @@ export async function resolveCompany(
 // ===== FUNÇÕES UTILITÁRIAS =====
 
 /**
- * Converte string para Decimal
+ * Converte valor para número decimal (aceita string ou number)
  */
-function parseDecimal(value: string): number | undefined {
-  if (!value || value.trim() === '') return undefined;
-  const parsed = parseFloat(value.replace(',', '.'));
+function parseDecimal(value: string | number): number | undefined {
+  if (value === null || value === undefined) return undefined;
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : undefined;
+  }
+  const v = value.trim();
+  if (v === '') return undefined;
+  const parsed = parseFloat(v.replace(',', '.'));
   return isNaN(parsed) ? undefined : parsed;
 }
 
@@ -209,6 +215,21 @@ function parseDate(year: string, month: string): Date | undefined {
   const m = parseInt(month);
   if (isNaN(y) || isNaN(m) || m < 1 || m > 12) return undefined;
   return new Date(y, m - 1, 1); // Primeiro dia do mês
+}
+
+/**
+ * Converte "01/mm/yyyy" para Date (primeiro dia do mês)
+ */
+function parseDateFromFecNumeracao(fec: string | undefined): Date | undefined {
+  if (!fec) return undefined;
+  const s = fec.trim();
+  const m = s.match(/^\s*(\d{2})\/(\d{2})\/(\d{4})\s*$/);
+  if (!m) return undefined;
+  const dd = parseInt(m[1], 10);
+  const mm = parseInt(m[2], 10);
+  const yyyy = parseInt(m[3], 10);
+  if (isNaN(dd) || isNaN(mm) || isNaN(yyyy) || mm < 1 || mm > 12) return undefined;
+  return new Date(yyyy, mm - 1, 1);
 }
 
 // ===== INTERFACE PARA DADOS NORMALIZADOS =====
