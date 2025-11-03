@@ -112,11 +112,21 @@ export function transformBrasilData(rawData: BrasilRawData): Partial<ImportData>
  * Converte dados brutos do Peru para o modelo normalizado
  */
 export function transformPeruData(rawData: PeruRawData): Partial<ImportData> {
+  // Extrair data de numeração com regex dd/mm/yyyy de vários campos possíveis
+  const fecRaw = (rawData as any).fecNumeracao || (rawData as any).fecNumeracion || (rawData as any).fecNumerac || (rawData as any).fec;
+  const fecMatch = typeof fecRaw === 'string' ? fecRaw.match(/(\d{2}\/\d{2}\/\d{4})/) : null;
+  const numerationDate = fecMatch ? fecMatch[1] : undefined;
+
+  // Série: normaliza e limita
+  const seriesRaw = (rawData as any).series ?? (rawData as any).serie;
+  const seriesSan = typeof seriesRaw === 'string' ? seriesRaw.trim() : undefined;
+
   return {
     declarationNumber: rawData.declaracao,
-    series: (rawData as any).series || (rawData as any).serie,
-    numerationDate: (rawData as any).fecNumeracao,
-    operationDate: parseDateFromFecNumeracao((rawData as any).fecNumeracao) || parseDate((rawData as any).ano_ref, (rawData as any).mes_ref),
+    series: seriesSan,
+    numerationDate,
+    // Prefere ano_ref/mes_ref para Peru, cai para data extraída da numeração
+    operationDate: parseDate((rawData as any).ano_ref, (rawData as any).mes_ref) || parseDateFromFecNumeracao(numerationDate),
     // Valores monetários
     fobUsd: parseDecimal((rawData as any).fobUsd ?? (rawData as any).fob),
     freightUsd: parseDecimal((rawData as any).fleteUsd ?? (rawData as any).flete),
