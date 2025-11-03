@@ -14,11 +14,11 @@ interface PeruBody {
 interface PeruQuery {
   page?: number;
   pageSize?: number;
-  ncm?: string;
+  cnpj?: string;
 }
 
 const peruRoutes: FastifyPluginAsync = async (app: FastifyInstance) => {
-  // GET /peru -> lista importações do Peru com paginação e filtro por NCM
+  // GET /peru -> lista importações do Peru com paginação e filtro por CNPJ
   app.get<{ Querystring: PeruQuery }>('/', {
     schema: {
       querystring: {
@@ -26,7 +26,7 @@ const peruRoutes: FastifyPluginAsync = async (app: FastifyInstance) => {
         properties: {
           page: { type: 'integer', minimum: 1 },
           pageSize: { type: 'integer', minimum: 1, maximum: 100 },
-          ncm: { type: 'string' },
+          cnpj: { type: 'string' },
         },
         additionalProperties: true,
       }
@@ -34,14 +34,14 @@ const peruRoutes: FastifyPluginAsync = async (app: FastifyInstance) => {
   }, async (request, reply) => {
     const prisma = new PrismaClient();
     try {
-      const { page = 1, pageSize = 20, ncm } = request.query || {};
+      const { page = 1, pageSize = 20, cnpj } = request.query || {};
       const take = Math.min(100, Math.max(1, Number(pageSize) || 20));
       const pageNum = Math.max(1, Number(page) || 1);
       const skip = (pageNum - 1) * take;
 
       const where: any = { country: { code: 'PE' } };
-      if (ncm && typeof ncm === 'string' && ncm.trim() !== '') {
-        where.product = { code: ncm.trim() };
+      if (cnpj && typeof cnpj === 'string' && cnpj.trim() !== '') {
+        where.company = { document: cnpj.trim() };
       }
 
       const total = await prisma.import.count({ where });
