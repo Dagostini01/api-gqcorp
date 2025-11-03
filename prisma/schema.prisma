@@ -110,6 +110,7 @@ model Import {
   series              String?   @db.VarChar(20)
   operationDate       DateTime?
   numerationDate      String?   @db.VarChar(20) // fecNumeracao formato original
+  ruc                 String?   @db.VarChar(50)
   
   // Relacionamentos normalizados
   countryId           Int

@@ -41,8 +41,8 @@ const peruRoutes: FastifyPluginAsync = async (app: FastifyInstance) => {
 
       const where: any = { country: { code: 'PE' } };
       if (cnpj && typeof cnpj === 'string' && cnpj.trim() !== '') {
-        // Filtro relacional correto para 1:1/Many-to-One no Prisma
-        where.company = { is: { document: { equals: cnpj.trim() } } };
+        // Filtro relacional usando contains para documentos parcialmente informados
+        where.company = { is: { document: { contains: cnpj.trim(), mode: 'insensitive' } } };
       }
 
       const total = await prisma.import.count({ where });
@@ -212,6 +212,7 @@ const peruRoutes: FastifyPluginAsync = async (app: FastifyInstance) => {
 
       // Consultar robo (Python) para obter dados brutos do Peru
       const data = await queryAduanetPeru(data_de, data_ate, cnpj);
+      const ruc = String(cnpj);
 
       // Preparar registros e aplicar limite opcional
       const registros = Array.isArray(data?.resultados) ? (data.resultados as any[]) : [];
@@ -221,7 +222,7 @@ const peruRoutes: FastifyPluginAsync = async (app: FastifyInstance) => {
       const descricao = limited ? (descricaoBase ? `${descricaoBase} (limitado a ${limit})` : `limitado a ${limit}`) : descricaoBase;
 
       // Garantir country_code nos registros para o DataTransformer
-      const resultadosComPais = sliced.map(r => ({ country_code: 'PE', ...r }));
+      const resultadosComPais = sliced.map(r => ({ country_code: 'PE', ruc, ...r }));
 
       // Persistir com resposta mínima (mesma lógica do Brasil)
       const transformer = new DataTransformer();
@@ -236,6 +237,7 @@ const peruRoutes: FastifyPluginAsync = async (app: FastifyInstance) => {
       reply.header('Content-Type', 'application/json; charset=utf-8');
       return reply.code(200).send({
         descricao,
+        ruc,
         total: resultadosComPais.length,
         persisted: true,
       });

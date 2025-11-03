@@ -193,6 +193,7 @@ export class DataTransformer {
             originCountryId,
             acquisitionCountryId,
             agencyId,
+            ruc: (typeof (rawData as any).ruc === 'string') ? String((rawData as any).ruc) : undefined,
             rawData: SAVE_RAW_DATA ? rawData : undefined,
           } as any,
         });
