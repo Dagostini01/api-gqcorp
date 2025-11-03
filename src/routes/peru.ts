@@ -8,6 +8,7 @@ interface PeruBody {
   data_de: string; // YYYY-MM-DD
   data_ate: string; // YYYY-MM-DD
   limit?: number;
+  force?: boolean;
 }
 
 interface PeruQuery {
@@ -160,13 +161,14 @@ const peruRoutes: FastifyPluginAsync = async (app: FastifyInstance) => {
           data_de: { type: 'string' },
           data_ate: { type: 'string' },
           limit: { type: 'integer', minimum: 1 },
+          force: { type: 'boolean' },
         },
         required: ['cnpj', 'data_de', 'data_ate'],
         additionalProperties: false,
       },
     },
   }, async (request, reply) => {
-    const { cnpj, data_de, data_ate, limit } = request.body;
+    const { cnpj, data_de, data_ate, limit, force } = request.body;
     try {
       // Validação de período já importado (igual ao Brasil, mas para PE)
       const prisma = new PrismaClient();
@@ -186,21 +188,25 @@ const peruRoutes: FastifyPluginAsync = async (app: FastifyInstance) => {
         return reply.code(400).send({ error: 'invalid_period', detail: 'data_de/data_ate devem estar no formato YYYY-MM-DD' });
       }
 
-      const existingCount = await prisma.import.count({
-        where: {
-          country: { code: 'PE' },
-          operationDate: { gte: startDate, lte: endDate },
-        },
-      });
-      await prisma.$disconnect();
-      if (existingCount > 0) {
-        reply.header('Content-Type', 'application/json; charset=utf-8');
-        return reply.code(409).send({
-          error: 'period_already_imported',
-          detail: 'Já existem registros para o período informado no Peru',
-          periodo: { de: data_de, ate: data_ate },
-          existingCount,
+      if (!force) {
+        const existingCount = await prisma.import.count({
+          where: {
+            country: { code: 'PE' },
+            operationDate: { gte: startDate, lte: endDate },
+          },
         });
+        await prisma.$disconnect();
+        if (existingCount > 0) {
+          reply.header('Content-Type', 'application/json; charset=utf-8');
+          return reply.code(409).send({
+            error: 'period_already_imported',
+            detail: 'Já existem registros para o período informado no Peru',
+            periodo: { de: data_de, ate: data_ate },
+            existingCount,
+          });
+        }
+      } else {
+        await prisma.$disconnect();
       }
 
       // Consultar robo (Python) para obter dados brutos do Peru

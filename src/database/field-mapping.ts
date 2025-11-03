@@ -119,14 +119,35 @@ export function transformPeruData(rawData: PeruRawData): Partial<ImportData> {
 
   // Série: normaliza e limita
   const seriesRaw = (rawData as any).series ?? (rawData as any).serie;
-  const seriesSan = typeof seriesRaw === 'string' ? seriesRaw.trim() : undefined;
+  let seriesSan = typeof seriesRaw === 'string' ? seriesRaw.trim() : undefined;
+  if (seriesSan) {
+    // Mantém apenas alfanuméricos e limita a 20
+    seriesSan = seriesSan.replace(/[^A-Za-z0-9]/g, '').slice(0, 20) || undefined;
+  }
+  if (!seriesSan && typeof (rawData as any).declaracao === 'string') {
+    // Fallback: tenta extrair token alfanumérico curto da declaração
+    const m = (rawData as any).declaracao.match(/[A-Za-z0-9]{1,20}/);
+    seriesSan = m ? m[0] : undefined;
+  }
+
+  // Se numerationDate ainda não foi possível, tenta varrer outras propriedades do raw
+  let numerationDateFinal = numerationDate;
+  if (!numerationDateFinal) {
+    for (const key of Object.keys(rawData)) {
+      const val = (rawData as any)[key];
+      if (typeof val === 'string') {
+        const mm = val.match(/(\d{2}\/\d{2}\/\d{4})/);
+        if (mm) { numerationDateFinal = mm[1]; break; }
+      }
+    }
+  }
 
   return {
     declarationNumber: rawData.declaracao,
     series: seriesSan,
-    numerationDate,
+    numerationDate: numerationDateFinal,
     // Prefere ano_ref/mes_ref para Peru, cai para data extraída da numeração
-    operationDate: parseDate((rawData as any).ano_ref, (rawData as any).mes_ref) || parseDateFromFecNumeracao(numerationDate),
+    operationDate: parseDate((rawData as any).ano_ref, (rawData as any).mes_ref) || parseDateFromFecNumeracao(numerationDateFinal),
     // Valores monetários
     fobUsd: parseDecimal((rawData as any).fobUsd ?? (rawData as any).fob),
     freightUsd: parseDecimal((rawData as any).fleteUsd ?? (rawData as any).flete),
