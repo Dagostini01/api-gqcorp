@@ -144,8 +144,42 @@ export class DataTransformer {
         const stateId = await this.resolveState(rawData.state, countryId);
         const productId = await this.resolveProduct(rawData.partida, (rawData as any).descComer);
         const companyId = await this.resolveCompany(rawData.importador, rawData.importador, countryId);
-        const originCountryId = await this.resolveOriginCountry((importData as any).originCountryCode);
-        const acquisitionCountryId = await this.resolveOriginCountry((importData as any).acquisitionCountryCode);
+        // Aplicar realinhamento de países para registros com cabeçalho deslocado
+        const declaracaoRaw = (rawData as any).declaracao;
+        const headerRegex = /Declaraci[oó]n\s+Importador\s+Fec\.\s+Numeraci[oó]n\s+Agencia\s+Ser/i;
+        const looksLikeHeader = typeof declaracaoRaw === 'string' && headerRegex.test(declaracaoRaw);
+        
+        let paisOrigFinal = (rawData as any).paisOrig;
+        let paisAdqFinal = (rawData as any).paisAdq;
+        
+        if (looksLikeHeader) {
+          // Nos registros com cabeçalho deslocado, tentar encontrar códigos de país válidos
+          const possibleCountries = [
+            (rawData as any).paisOrig, (rawData as any).paisAdq, 
+            (rawData as any).paisOrigName, (rawData as any).paisAdqName
+          ];
+          
+          let paisOrigRealigned: string | undefined;
+          let paisAdqRealigned: string | undefined;
+          
+          for (const field of possibleCountries) {
+            if (typeof field === 'string') {
+              // Procurar por códigos de país de 2-3 letras ou números válidos
+              const countryMatch = field.match(/^[A-Z]{2,3}$|^\d{1,3}$/);
+              if (countryMatch && !paisOrigRealigned) {
+                paisOrigRealigned = field;
+              } else if (countryMatch && !paisAdqRealigned) {
+                paisAdqRealigned = field;
+              }
+            }
+          }
+          
+          if (paisOrigRealigned) paisOrigFinal = paisOrigRealigned;
+          if (paisAdqRealigned) paisAdqFinal = paisAdqRealigned;
+        }
+        
+        const originCountryId = await this.resolveOriginCountry(paisOrigFinal);
+        const acquisitionCountryId = await this.resolveOriginCountry(paisAdqFinal);
         const agencyId = await this.resolveAgency((rawData as any).agencia, countryId);
 
         // Criar registro de importação
