@@ -365,6 +365,43 @@
               }
             }
           ]
+        },
+        {
+          "name": "GET /chile/importar",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "http://localhost:3000/chile/importar?ano=2025&mes=1&limit=20",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3000",
+              "path": ["chile", "importar"],
+              "query": [
+                { "key": "ano", "value": "2025" },
+                { "key": "mes", "value": "1" },
+                { "key": "limit", "value": "20" }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Response has total and resultados', function () {",
+                  "  var json = pm.response.json();",
+                  "  pm.expect(json).to.have.property('total');",
+                  "  pm.expect(json).to.have.property('resultados');",
+                  "  pm.expect(json).to.have.property('descricao');",
+                  "});"
+                ]
+              }
+            }
+          ]
         }
       ]
     }

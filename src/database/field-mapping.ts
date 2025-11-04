@@ -212,7 +212,23 @@ export function transformPeruData(rawData: PeruRawData): Partial<ImportData> {
  */
 export function transformChileData(rawData: ChileRawData): Partial<ImportData> {
   return {
+    // Datas
     operationDate: parseDate(rawData.ano_ref, rawData.mes_ref),
+    // Valores financeiros (Chile usa vírgula como decimal em vários campos)
+    fobUsd: parseDecimal((rawData as any).FOB),
+    freightUsd: parseDecimal((rawData as any).FLETE),
+    insuranceUsd: parseDecimal((rawData as any).SEGURO),
+    cifUsd: parseDecimal((rawData as any).CIF),
+    // Quantidades e pesos
+    netWeight: parseDecimal((rawData as any).TOT_PESO),
+    packages: ((rawData as any).TOT_BULTOS ? parseInt(((rawData as any).TOT_BULTOS as string).replace(/[^0-9-]/g, ''), 10) : undefined),
+    unit: (rawData as any).MEDIDA,
+    // Classificação/commodity
+    commodity: (rawData as any)["ARANC-ALA"] || (rawData as any)["ARANC-NAC"],
+    // Países de origem e aquisição (códigos numéricos ou strings)
+    originCountryId: undefined, // resolvido no transformer com resolveOriginCountry
+    acquisitionCountryId: undefined, // idem
+    // Fonte de dados
     dataSource: 'CKAN_CHILE',
   };
 }

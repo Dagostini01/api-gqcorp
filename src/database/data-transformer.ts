@@ -230,22 +230,85 @@ export class DataTransformer {
         const importData = transformChileData(rawData);
 
         // Resolver relacionamentos
-        const countryId = await this.resolveCountry(rawData.country_code);
-        const stateId = await this.resolveState(rawData.state, countryId);
+        // Normalizar código do país: usar 'CL' na base
+        const countryCode = (rawData.country_code === 'CH') ? 'CL' : (rawData.country_code || 'CL');
+        const countryId = await this.resolveCountry(countryCode);
+        const stateId = await this.resolveState((rawData as any).state, countryId);
 
-        // Para Chile, precisaremos mapear campos específicos
-        // Por enquanto, criar registro básico
-        await this.prisma.import.create({
-          data: {
-            ...importData,
-            countryId,
-            stateId,
-            declarationNumber: 'CHILE-' + Date.now(), // Temporário
-            productId: await this.resolveProduct('UNKNOWN'),
-            companyId: await this.resolveCompany('UNKNOWN', 'UNKNOWN', countryId),
-            rawData: SAVE_RAW_DATA ? rawData : undefined,
-          } as any,
-        });
+        // Declaracao: tentar NUM_DI (número de documento) ou fallback em NUMENCRIPTADO
+        const declarationNumber = (rawData as any).NUM_DI || (rawData as any).NUMENCRIPTADO || undefined;
+
+        // Produto: usar classificação ARANC-ALA (alternativa ARANC-NAC)
+        const productCode = (rawData as any)["ARANC-ALA"] || (rawData as any)["ARANC-NAC"] || 'UNKNOWN';
+        const productDesc = (rawData as any).DNOMBRE || (rawData as any).DVARIEDAD || undefined;
+        const productId = await this.resolveProduct(productCode, productDesc);
+
+        // Empresa/importador: tentar NUM_UNICO_IMPORTADOR; se não existir, usar RUT do emissor
+        const rutEmissor = ((rawData as any).NUMRUTEMI && (rawData as any).DIGVEREMI)
+          ? `${(rawData as any).NUMRUTEMI}-${(rawData as any).DIGVEREMI}`
+          : ((rawData as any).NUMRUTEMI || undefined);
+        const importerDoc = (rawData as any).NUM_UNICO_IMPORTADOR || rutEmissor || 'UNKNOWN';
+        const importerName = (rawData as any).NOMEMISOR || `IMPORTADOR ${importerDoc}`;
+        const companyId = await this.resolveCompany(String(importerDoc), String(importerName), countryId);
+
+        // Países de origem e aquisição
+        const originCountryId = await this.resolveOriginCountry((rawData as any).PA_ORIG);
+        const acquisitionCountryId = await this.resolveOriginCountry((rawData as any).PA_ADQ);
+
+        // Upsert por declarationNumber (quando disponível) para evitar duplicação e garantir rawData
+        if (declarationNumber) {
+          const existing = await this.prisma.import.findFirst({
+            where: { declarationNumber, countryId },
+          });
+
+          if (existing) {
+            await this.prisma.import.update({
+              where: { id: existing.id },
+              data: {
+                ...importData,
+                // manter país
+                countryId,
+                stateId,
+                productId,
+                companyId,
+                originCountryId,
+                acquisitionCountryId,
+                // sempre atualizar rawData para Chile
+                rawData: rawData,
+              } as any,
+            });
+          } else {
+            await this.prisma.import.create({
+              data: {
+                ...importData,
+                countryId,
+                stateId,
+                declarationNumber,
+                productId,
+                companyId,
+                originCountryId,
+                acquisitionCountryId,
+                rawData: rawData,
+              } as any,
+            });
+          }
+        } else {
+          // Sem chave única confiável: criar registro novo
+          await this.prisma.import.create({
+            data: {
+              ...importData,
+              countryId,
+              stateId,
+              // gerar um identificador previsível para referência
+              declarationNumber: `CL-${(rawData as any).ano_ref}-${(rawData as any).mes_ref}-${Date.now()}`,
+              productId,
+              companyId,
+              originCountryId,
+              acquisitionCountryId,
+              rawData: rawData,
+            } as any,
+          });
+        }
 
       } catch (error) {
         console.error('Erro ao processar registro do Chile:', error);
