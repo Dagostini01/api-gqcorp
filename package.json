@@ -11,6 +11,7 @@
     "check:db": "ts-node src/database/check-connection.ts"
   },
   "dependencies": {
+    "@fastify/cors": "^11.1.0",
     "@prisma/client": "^6.18.0",
     "fastify": "^4.27.2",
     "prisma": "^6.18.0"
