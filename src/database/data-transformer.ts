@@ -183,6 +183,8 @@ export class DataTransformer {
         const agencyId = await this.resolveAgency((rawData as any).agencia, countryId);
 
         // Criar registro de importação
+        const rucVal = (typeof (rawData as any).ruc === 'string') ? String((rawData as any).ruc) : undefined;
+
         await this.prisma.import.create({
           data: {
             ...importData,
@@ -193,10 +195,19 @@ export class DataTransformer {
             originCountryId,
             acquisitionCountryId,
             agencyId,
-            ruc: (typeof (rawData as any).ruc === 'string') ? String((rawData as any).ruc) : undefined,
+            ruc: rucVal,
             rawData: SAVE_RAW_DATA ? rawData : undefined,
           } as any,
         });
+
+        // Upsert na tabela cnpj_peru para manter lista de RUCs sem repetição
+        if (rucVal) {
+          await this.prisma.cnpjPeru.upsert({
+            where: { ruc: rucVal },
+            update: {},
+            create: { ruc: rucVal },
+          });
+        }
 
       } catch (error) {
         console.error('Erro ao processar registro do Peru:', error);

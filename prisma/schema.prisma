@@ -221,3 +221,15 @@ enum QueryStatus {
   TIMEOUT
   PARTIAL
 }
+
+// ===== TABELA DE RUCs (CNPJ Peru) =====
+
+model CnpjPeru {
+  id        Int      @id @default(autoincrement())
+  ruc       String   @unique @db.VarChar(50)
+  nome_ruc  String?  @db.VarChar(255)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("cnpj_peru")
+}

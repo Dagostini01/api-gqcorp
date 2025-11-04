@@ -2,6 +2,7 @@ import { FastifyInstance, FastifyPluginAsync } from 'fastify';
 import { queryAduanetPeru } from '../services/peruService';
 import { PrismaClient } from '@prisma/client';
 import { DataTransformer } from '../database/data-transformer';
+import { Prisma } from '@prisma/client';
 
 interface PeruBody {
   cnpj: string;
@@ -14,11 +15,11 @@ interface PeruBody {
 interface PeruQuery {
   page?: number;
   pageSize?: number;
-  cnpj?: string;
+  ruc?: string;
 }
 
 const peruRoutes: FastifyPluginAsync = async (app: FastifyInstance) => {
-  // GET /peru -> lista importações do Peru com paginação e filtro por CNPJ
+  // GET /peru -> lista importações do Peru com paginação e filtro por RUC
   app.get<{ Querystring: PeruQuery }>('/', {
     schema: {
       querystring: {
@@ -26,7 +27,7 @@ const peruRoutes: FastifyPluginAsync = async (app: FastifyInstance) => {
         properties: {
           page: { type: 'integer', minimum: 1 },
           pageSize: { type: 'integer', minimum: 1, maximum: 100 },
-          cnpj: { type: 'string' },
+          ruc: { type: 'string' },
         },
         additionalProperties: true,
       }
@@ -34,15 +35,15 @@ const peruRoutes: FastifyPluginAsync = async (app: FastifyInstance) => {
   }, async (request, reply) => {
     const prisma = new PrismaClient();
     try {
-      const { page = 1, pageSize = 20, cnpj } = request.query || {};
+      const { page = 1, pageSize = 20, ruc } = request.query || {};
       const take = Math.min(100, Math.max(1, Number(pageSize) || 20));
       const pageNum = Math.max(1, Number(page) || 1);
       const skip = (pageNum - 1) * take;
 
       const where: any = { country: { code: 'PE' } };
-      if (cnpj && typeof cnpj === 'string' && cnpj.trim() !== '') {
-        // Filtro relacional usando contains para documentos parcialmente informados
-        where.company = { is: { document: { contains: cnpj.trim(), mode: 'insensitive' } } };
+      if (ruc && typeof ruc === 'string' && ruc.trim() !== '') {
+        // Filtro direto na coluna ruc (string), usando contains para parcial
+        where.ruc = { contains: ruc.trim(), mode: 'insensitive' };
       }
 
       const total = await prisma.import.count({ where });
@@ -78,6 +79,7 @@ const peruRoutes: FastifyPluginAsync = async (app: FastifyInstance) => {
       const resultados = imports.map((imp) => ({
         // Campos base
         country_code: imp.country.code,
+        ruc: (imp as any).ruc ?? null,
         importador: imp.company.document,
         declaracao: imp.declarationNumber,
         serie: (imp.series ?? (imp as any).rawData?.serie ?? null),
@@ -246,6 +248,98 @@ const peruRoutes: FastifyPluginAsync = async (app: FastifyInstance) => {
       return reply.code(500).send({ error: 'robo_aduanet_failed', detail: err?.message });
     }
   });
+
+  // POST /peru/cnpj_peru/nome -> atualiza o nome_ruc para um RUC salvo
+  app.post<{ Body: { id: number; nome_ruc: string } }>('/cnpj_peru/nome', {
+    schema: {
+      body: {
+        type: 'object',
+        properties: {
+          id: { type: 'integer', minimum: 1 },
+          nome_ruc: { type: 'string' },
+        },
+        required: ['id', 'nome_ruc'],
+        additionalProperties: false,
+      },
+    },
+  }, async (request, reply) => {
+    const prisma = new PrismaClient();
+    try {
+      const { id, nome_ruc } = request.body;
+      const updated = await prisma.cnpjPeru.update({
+        where: { id },
+        data: { nome_ruc },
+      });
+      await prisma.$disconnect();
+      reply.header('Content-Type', 'application/json; charset=utf-8');
+      return reply.code(200).send({ id: updated.id, ruc: updated.ruc, nome_ruc: updated.nome_ruc });
+    } catch (err: any) {
+      await prisma.$disconnect();
+      // Registro não encontrado
+      if (err?.code === 'P2025') {
+        return reply.code(404).send({ error: 'ruc_not_found', detail: 'ID de RUC não encontrado' });
+      }
+      request.log.error({ err }, 'Falha ao atualizar nome_ruc em cnpj_peru');
+      return reply.code(500).send({ error: 'update_nome_ruc_failed', detail: err?.message });
+    }
+  });
+
+  // GET /peru/cnpj_peru -> lista RUCs salvos (sem repetição) com paginação e busca
+  app.get<{ Querystring: { page?: number; pageSize?: number; q?: string } }>(
+    '/cnpj_peru',
+    {
+      schema: {
+        querystring: {
+          type: 'object',
+          properties: {
+            page: { type: 'integer', minimum: 1 },
+            pageSize: { type: 'integer', minimum: 1, maximum: 100 },
+            q: { type: 'string' },
+          },
+          additionalProperties: true,
+        },
+      },
+    },
+    async (request, reply) => {
+      const prisma = new PrismaClient();
+      try {
+        const { page = 1, pageSize = 20, q } = request.query || {} as any;
+        const take = Math.min(100, Math.max(1, Number(pageSize) || 20));
+        const pageNum = Math.max(1, Number(page) || 1);
+        const skip = (pageNum - 1) * take;
+
+        const where: any = {};
+        if (q && typeof q === 'string' && q.trim() !== '') {
+          where.OR = [
+            { ruc: { contains: q.trim(), mode: 'insensitive' } },
+            { nome_ruc: { contains: q.trim(), mode: 'insensitive' } },
+          ];
+        }
+
+        const total = await prisma.cnpjPeru.count({ where });
+        const rows = await prisma.cnpjPeru.findMany({
+          where,
+          orderBy: { id: 'desc' },
+          skip,
+          take,
+        });
+
+        await prisma.$disconnect();
+        reply.header('Content-Type', 'application/json; charset=utf-8');
+        return reply.code(200).send({
+          total,
+          page: pageNum,
+          pageSize: take,
+          totalPages: Math.max(1, Math.ceil(total / take)),
+          resultados: rows.map(r => ({ id: r.id, ruc: r.ruc, nome_ruc: r.nome_ruc, createdAt: r.createdAt, updatedAt: r.updatedAt })),
+        });
+      } catch (err: any) {
+        await prisma.$disconnect();
+        request.log.error({ err }, 'Falha ao listar cnpj_peru');
+        return reply.code(500).send({ error: 'list_cnpj_peru_failed', detail: err?.message });
+      }
+    }
+  );
 };
 
 export default peruRoutes;

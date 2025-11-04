@@ -160,11 +160,11 @@
       "name": "Peru",
       "item": [
         {
-          "name": "GET /peru (paginação e filtro NCM)",
+          "name": "GET /peru (paginação e filtro RUC)",
           "request": {
             "method": "GET",
             "url": {
-              "raw": "http://localhost:3000/peru?page=1&pageSize=5&ncm=39059990",
+              "raw": "http://localhost:3000/peru?page=1&pageSize=5&ruc=20100860351",
               "protocol": "http",
               "host": ["localhost"],
               "port": "3000",
@@ -172,7 +172,7 @@
               "query": [
                 { "key": "page", "value": "1" },
                 { "key": "pageSize", "value": "5" },
-                { "key": "ncm", "value": "39059990" }
+                { "key": "ruc", "value": "20100860351" }
               ]
             }
           },
@@ -195,6 +195,9 @@
                   "  pm.expect(json.page).to.be.a('number');",
                   "  pm.expect(json.pageSize).to.be.a('number');",
                   "  pm.expect(json.resultados.length).to.be.at.most(json.pageSize);",
+                  "  pm.test('Each item has ruc', function () {",
+                  "    json.resultados.forEach(function (it) { pm.expect(it).to.have.property('ruc'); });",
+                  "  });",
                   "});"
                 ]
               }
@@ -234,6 +237,86 @@
                   "  pm.expect(json).to.have.property('total');",
                   "  pm.expect(json).to.have.property('persisted');",
                   "  pm.expect(json.resultados).to.eql(undefined);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ,
+        {
+          "name": "GET /peru/cnpj_peru (listar RUCs)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "http://localhost:3000/peru/cnpj_peru?page=1&pageSize=10&q=2010",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3000",
+              "path": ["peru", "cnpj_peru"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "pageSize", "value": "10" },
+                { "key": "q", "value": "2010" }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Response has pagination metadata', function () {",
+                  "  var json = pm.response.json();",
+                  "  pm.expect(json).to.have.property('total');",
+                  "  pm.expect(json).to.have.property('page');",
+                  "  pm.expect(json).to.have.property('pageSize');",
+                  "  pm.expect(json).to.have.property('totalPages');",
+                  "  pm.expect(json).to.have.property('resultados');",
+                  "  pm.expect(json.resultados.length).to.be.at.most(json.pageSize);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /peru/cnpj_peru/nome (atualizar nome_ruc)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": 1,\n  \"nome_ruc\": \"ACME Peru\"\n}"
+            },
+            "url": {
+              "raw": "http://localhost:3000/peru/cnpj_peru/nome",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3000",
+              "path": ["peru", "cnpj_peru", "nome"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Response has id, ruc and nome_ruc', function () {",
+                  "  var json = pm.response.json();",
+                  "  pm.expect(json).to.have.property('id');",
+                  "  pm.expect(json).to.have.property('ruc');",
+                  "  pm.expect(json).to.have.property('nome_ruc');",
                   "});"
                 ]
               }
