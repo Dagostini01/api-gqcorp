@@ -5,6 +5,7 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
+package-lock.json
 
 # Runtime data
 pids
@@ -160,3 +161,7 @@ config/local.json
 # Prisma local databases (dev-only)
 prisma/*.db
 prisma/*.sqlite
+
+# Postman collections
+postman/
+/src/generated/prisma
