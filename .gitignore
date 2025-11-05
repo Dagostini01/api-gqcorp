@@ -148,3 +148,4 @@ download_*
 
 # Local configuration
 config/local.json
+/src/generated/prisma
