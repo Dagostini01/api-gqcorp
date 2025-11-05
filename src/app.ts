@@ -4,6 +4,7 @@ import brasilRoutes from './routes/brasil';
 import healthRoutes from './routes/health';
 import peruRoutes from './routes/peru';
 import chileRoutes from './routes/chile';
+import usersRoutes from './routes/users';
 
 export function buildApp() {
   const app = Fastify({ logger: true });
@@ -17,6 +18,7 @@ export function buildApp() {
   app.register(brasilRoutes, { prefix: '/brasil' });
   app.register(peruRoutes, { prefix: '/peru' });
   app.register(chileRoutes, { prefix: '/chile' });
+  app.register(usersRoutes, { prefix: '/usuarios' });
   app.register(healthRoutes);
   return app;
 }
