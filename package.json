@@ -6,14 +6,19 @@
   "scripts": {
     "dev": "ts-node src/server.ts",
     "build": "tsc",
-    "start": "node dist/server.js"
+    "start": "node dist/server.js",
+    "seed": "ts-node src/database/seed.ts",
+    "check:db": "ts-node src/database/check-connection.ts"
   },
   "dependencies": {
-    "fastify": "^4.27.2"
+    "@fastify/cors": "^8.5.0",
+    "@prisma/client": "^6.18.0",
+    "fastify": "^4.27.2",
+    "prisma": "^6.18.0"
   },
   "devDependencies": {
+    "@types/node": "^20.11.30",
     "ts-node": "^10.9.2",
-    "typescript": "^5.6.3",
-    "@types/node": "^20.11.30"
+    "typescript": "^5.6.3"
   }
 }

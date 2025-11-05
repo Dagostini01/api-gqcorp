@@ -183,7 +183,7 @@ def write_array_stream(
     """
     Escreve a array JSON em tmp_array_path (streaming) e retorna a contagem.
     Se enable_limit=True e limit>0, corta após N registros.
-    Injeta country_code='CH', ano_ref=<year>, mes_ref=<month> em cada item.
+    Injeta country_code='CL', ano_ref=<year>, mes_ref=<month> em cada item.
     """
     use_limit = bool(enable_limit and limit is not None and limit > 0)
 
@@ -227,7 +227,7 @@ def write_array_stream(
                                     rec[k] = v.strip()
 
                             # >>> novos campos por item
-                            rec["country_code"] = "CH"
+                            rec["country_code"] = "CL"
                             rec["ano_ref"] = year
                             rec["mes_ref"] = month
 
@@ -267,7 +267,7 @@ def write_array_stream(
                                 rec[k] = v.strip()
 
                         # >>> novos campos por item
-                        rec["country_code"] = "CH"
+                        rec["country_code"] = "CL"
                         rec["ano_ref"] = year
                         rec["mes_ref"] = month
 
@@ -367,7 +367,7 @@ def run(year: int, month: int, workdir: Path, argv, limit: int | None, enable_li
 if __name__ == "__main__":
     import sys
     ap = argparse.ArgumentParser(
-        description="Chile (CKAN) -> JSON bruto streaming, country_code=CH (limpa workdir ao final)."
+        description="Chile (CKAN) -> JSON bruto streaming, country_code=CL (limpa workdir ao final)."
     )
     ap.add_argument("year", type=int, help="Ano (ex.: 2025)")
     ap.add_argument("month", type=int, help="Mês 1..12 (ex.: 1)")

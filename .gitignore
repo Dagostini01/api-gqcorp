@@ -3,6 +3,8 @@ node_modules/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
 
 # Runtime data
 pids
@@ -105,6 +107,7 @@ coverage
 # Compiled TypeScript files
 dist/
 build/
+out/
 
 # IDE files
 .vscode/
@@ -121,6 +124,7 @@ build/
 .Trashes
 ehthumbs.db
 Thumbs.db
+Desktop.ini
 
 # Python
 __pycache__/
@@ -148,3 +152,11 @@ download_*
 
 # Local configuration
 config/local.json
+
+# Yarn Plug'n'Play
+.pnp
+.pnp.cjs
+
+# Prisma local databases (dev-only)
+prisma/*.db
+prisma/*.sqlite

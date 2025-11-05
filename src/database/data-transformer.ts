@@ -1,0 +1,590 @@
+/**
+ * Serviço de Transformação de Dados
+ * Converte dados brutos dos robôs para o modelo relacional normalizado
+ */
+
+import { PrismaClient } from '@prisma/client';
+import { SAVE_RAW_DATA } from '../config/env';
+import {
+  BrasilRawData,
+  PeruRawData,
+  ChileRawData,
+  ImportData,
+  transformBrasilData,
+  transformPeruData,
+  transformChileData,
+  INITIAL_COUNTRIES,
+  INITIAL_STATES_BRASIL
+} from './field-mapping';
+
+export class DataTransformer {
+  private prisma: PrismaClient;
+  private countryCache = new Map<string, number>();
+  private stateCache = new Map<string, number>();
+  private productCache = new Map<string, number>();
+  private companyCache = new Map<string, number>();
+  private agencyCache = new Map<string, number>();
+
+  constructor() {
+    this.prisma = new PrismaClient();
+  }
+
+  /**
+   * Inicializa dados básicos (países, estados)
+   */
+  async initializeBaseData(): Promise<void> {
+    console.log('Inicializando dados básicos...');
+
+    // Criar países
+    for (const countryData of INITIAL_COUNTRIES) {
+      const country = await this.prisma.country.upsert({
+        where: { code: countryData.code },
+        update: {},
+        create: countryData,
+      });
+      this.countryCache.set(countryData.code, country.id);
+    }
+
+    // Criar estados do Brasil
+    const brasilId = this.countryCache.get('BR');
+    if (brasilId) {
+      for (const stateData of INITIAL_STATES_BRASIL) {
+        const state = await this.prisma.state.upsert({
+          where: { 
+            code_countryId: { 
+              code: stateData.code, 
+              countryId: brasilId 
+            } 
+          },
+          update: {},
+          create: {
+            ...stateData,
+            countryId: brasilId,
+          },
+        });
+        this.stateCache.set(`${stateData.code}-${brasilId}`, state.id);
+      }
+    }
+
+    console.log('Dados básicos inicializados com sucesso!');
+  }
+
+  /**
+   * Processa dados do Brasil
+   */
+  async processBrasilData(rawDataArray: BrasilRawData[]): Promise<void> {
+    console.log(`Processando ${rawDataArray.length} registros do Brasil...`);
+
+    for (const rawData of rawDataArray) {
+      try {
+        // Transformar dados básicos
+        const importData = transformBrasilData(rawData);
+
+        // Resolver relacionamentos
+        const countryId = await this.resolveCountry(rawData.country_code);
+        const stateId = await this.resolveState(rawData.state, countryId);
+        const productId = await this.resolveProduct(rawData.partida, rawData.descComer);
+        const companyId = await this.resolveCompany(rawData.importador, rawData.importador, countryId);
+        const originCountryId = await this.resolveOriginCountry(rawData.paisOrig);
+
+        // Criar registro de importação
+        await this.prisma.import.create({
+          data: {
+            ...importData,
+            countryId,
+            stateId,
+            productId,
+            companyId,
+            originCountryId,
+            rawData: SAVE_RAW_DATA ? rawData : undefined,
+          } as any,
+        });
+
+      } catch (error) {
+        console.error('Erro ao processar registro do Brasil:', error);
+        console.error('Dados:', rawData);
+      }
+    }
+
+    console.log('Processamento do Brasil concluído!');
+  }
+
+  /**
+   * Processa dados do Peru
+   */
+  async processPeruData(rawDataArray: PeruRawData[]): Promise<void> {
+    console.log(`Processando ${rawDataArray.length} registros do Peru...`);
+
+    for (const rawData of rawDataArray) {
+      try {
+        // Transformar dados básicos
+        const importData = transformPeruData(rawData);
+
+        // Sanitização de comprimento e tipos conforme schema Prisma
+        const limitStr = (v: any, max: number): string | undefined => {
+          if (v === null || v === undefined) return undefined;
+          const s = String(v).trim();
+          if (s === '') return undefined;
+          return s.length > max ? s.slice(0, max) : s;
+        };
+        importData.declarationNumber = limitStr(importData.declarationNumber as any, 50);
+        importData.series = limitStr(importData.series as any, 20);
+        importData.numerationDate = limitStr(importData.numerationDate as any, 20);
+        importData.unit = limitStr(importData.unit as any, 20);
+        importData.channel = limitStr(importData.channel as any, 20);
+        importData.warehouse = limitStr(importData.warehouse as any, 100);
+        importData.commodity = limitStr(importData.commodity as any, 50);
+        if (importData.packages !== undefined && importData.packages !== null) {
+          const n = Number(importData.packages as any);
+          importData.packages = Number.isFinite(n) ? Math.trunc(n) : undefined;
+        }
+
+        // Resolver relacionamentos
+        const countryId = await this.resolveCountry(rawData.country_code);
+        const stateId = await this.resolveState(rawData.state, countryId);
+        const productId = await this.resolveProduct(rawData.partida, (rawData as any).descComer);
+        const companyId = await this.resolveCompany(rawData.importador, rawData.importador, countryId);
+        // Aplicar realinhamento de países para registros com cabeçalho deslocado
+        const declaracaoRaw = (rawData as any).declaracao;
+        const headerRegex = /Declaraci[oó]n\s+Importador\s+Fec\.\s+Numeraci[oó]n\s+Agencia\s+Ser/i;
+        const looksLikeHeader = typeof declaracaoRaw === 'string' && headerRegex.test(declaracaoRaw);
+        
+        let paisOrigFinal = (rawData as any).paisOrig;
+        let paisAdqFinal = (rawData as any).paisAdq;
+        
+        if (looksLikeHeader) {
+          // Nos registros com cabeçalho deslocado, tentar encontrar códigos de país válidos
+          const possibleCountries = [
+            (rawData as any).paisOrig, (rawData as any).paisAdq, 
+            (rawData as any).paisOrigName, (rawData as any).paisAdqName
+          ];
+          
+          let paisOrigRealigned: string | undefined;
+          let paisAdqRealigned: string | undefined;
+          
+          for (const field of possibleCountries) {
+            if (typeof field === 'string') {
+              // Procurar por códigos de país de 2-3 letras ou números válidos
+              const countryMatch = field.match(/^[A-Z]{2,3}$|^\d{1,3}$/);
+              if (countryMatch && !paisOrigRealigned) {
+                paisOrigRealigned = field;
+              } else if (countryMatch && !paisAdqRealigned) {
+                paisAdqRealigned = field;
+              }
+            }
+          }
+          
+          if (paisOrigRealigned) paisOrigFinal = paisOrigRealigned;
+          if (paisAdqRealigned) paisAdqFinal = paisAdqRealigned;
+        }
+        
+        const originCountryId = await this.resolveOriginCountry(paisOrigFinal);
+        const acquisitionCountryId = await this.resolveOriginCountry(paisAdqFinal);
+        const agencyId = await this.resolveAgency((rawData as any).agencia, countryId);
+
+        // Criar registro de importação
+        const rucVal = (typeof (rawData as any).ruc === 'string') ? String((rawData as any).ruc) : undefined;
+
+        await this.prisma.import.create({
+          data: {
+            ...importData,
+            countryId,
+            stateId,
+            productId,
+            companyId,
+            originCountryId,
+            acquisitionCountryId,
+            agencyId,
+            ruc: rucVal,
+            rawData: SAVE_RAW_DATA ? rawData : undefined,
+          } as any,
+        });
+
+        // Upsert na tabela cnpj_peru para manter lista de RUCs sem repetição
+        if (rucVal) {
+          await this.prisma.cnpjPeru.upsert({
+            where: { ruc: rucVal },
+            update: {},
+            create: { ruc: rucVal },
+          });
+        }
+
+      } catch (error) {
+        console.error('Erro ao processar registro do Peru:', error);
+        console.error('Dados:', rawData);
+      }
+    }
+
+    console.log('Processamento do Peru concluído!');
+  }
+
+  /**
+   * Processa dados do Chile
+   */
+  async processChileData(rawDataArray: ChileRawData[]): Promise<void> {
+    console.log(`Processando ${rawDataArray.length} registros do Chile...`);
+
+    for (const rawData of rawDataArray) {
+      try {
+        // Transformar dados básicos
+        const importData = transformChileData(rawData);
+
+        // Resolver relacionamentos
+        // Normalizar código do país: usar 'CL' na base
+        const countryCode = (rawData.country_code === 'CH') ? 'CL' : (rawData.country_code || 'CL');
+        const countryId = await this.resolveCountry(countryCode);
+        const stateId = await this.resolveState((rawData as any).state, countryId);
+
+        // Declaracao: tentar NUM_DI (número de documento) ou fallback em NUMENCRIPTADO
+        const declarationNumber = (rawData as any).NUM_DI || (rawData as any).NUMENCRIPTADO || undefined;
+
+        // Produto: usar classificação ARANC-ALA (alternativa ARANC-NAC)
+        const productCode = (rawData as any)["ARANC-ALA"] || (rawData as any)["ARANC-NAC"] || 'UNKNOWN';
+        const productDesc = (rawData as any).DNOMBRE || (rawData as any).DVARIEDAD || undefined;
+        const productId = await this.resolveProduct(productCode, productDesc);
+
+        // Empresa/importador: tentar NUM_UNICO_IMPORTADOR; se não existir, usar RUT do emissor
+        const rutEmissor = ((rawData as any).NUMRUTEMI && (rawData as any).DIGVEREMI)
+          ? `${(rawData as any).NUMRUTEMI}-${(rawData as any).DIGVEREMI}`
+          : ((rawData as any).NUMRUTEMI || undefined);
+        const importerDoc = (rawData as any).NUM_UNICO_IMPORTADOR || rutEmissor || 'UNKNOWN';
+        const importerName = (rawData as any).NOMEMISOR || `IMPORTADOR ${importerDoc}`;
+        const companyId = await this.resolveCompany(String(importerDoc), String(importerName), countryId);
+
+        // Países de origem e aquisição
+        const originCountryId = await this.resolveOriginCountry((rawData as any).PA_ORIG);
+        const acquisitionCountryId = await this.resolveOriginCountry((rawData as any).PA_ADQ);
+
+        // Upsert por declarationNumber (quando disponível) para evitar duplicação e garantir rawData
+        if (declarationNumber) {
+          const existing = await this.prisma.import.findFirst({
+            where: { declarationNumber, countryId },
+          });
+
+          if (existing) {
+            await this.prisma.import.update({
+              where: { id: existing.id },
+              data: {
+                ...importData,
+                // manter país
+                countryId,
+                stateId,
+                productId,
+                companyId,
+                originCountryId,
+                acquisitionCountryId,
+                // sempre atualizar rawData para Chile
+                rawData: rawData,
+              } as any,
+            });
+          } else {
+            await this.prisma.import.create({
+              data: {
+                ...importData,
+                countryId,
+                stateId,
+                declarationNumber,
+                productId,
+                companyId,
+                originCountryId,
+                acquisitionCountryId,
+                rawData: rawData,
+              } as any,
+            });
+          }
+        } else {
+          // Sem chave única confiável: criar registro novo
+          await this.prisma.import.create({
+            data: {
+              ...importData,
+              countryId,
+              stateId,
+              // gerar um identificador previsível para referência
+              declarationNumber: `CL-${(rawData as any).ano_ref}-${(rawData as any).mes_ref}-${Date.now()}`,
+              productId,
+              companyId,
+              originCountryId,
+              acquisitionCountryId,
+              rawData: rawData,
+            } as any,
+          });
+        }
+
+      } catch (error) {
+        console.error('Erro ao processar registro do Chile:', error);
+        console.error('Dados:', rawData);
+      }
+    }
+
+    console.log('Processamento do Chile concluído!');
+  }
+
+  /**
+   * Resolve país por código (com cache)
+   */
+  private async resolveCountry(countryCode: string): Promise<number> {
+    if (this.countryCache.has(countryCode)) {
+      return this.countryCache.get(countryCode)!;
+    }
+
+    const country = await this.prisma.country.findUnique({
+      where: { code: countryCode }
+    });
+
+    if (!country) {
+      throw new Error(`País não encontrado: ${countryCode}`);
+    }
+
+    this.countryCache.set(countryCode, country.id);
+    return country.id;
+  }
+
+  /**
+   * Resolve estado por código e país (com cache)
+   */
+  private async resolveState(stateCode: string, countryId: number): Promise<number | null> {
+    const cacheKey = `${stateCode}-${countryId}`;
+    if (this.stateCache.has(cacheKey)) {
+      return this.stateCache.get(cacheKey)!;
+    }
+
+    const input = (stateCode || '').trim();
+    let codeCandidate = input.toUpperCase();
+
+    // Se vier nome completo (ex.: "São Paulo"), mapeia para código (SP)
+    if (codeCandidate.length > 2) {
+      const normalize = (s: string) => s
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toUpperCase()
+        .trim();
+      const nameToCode: Record<string, string> = {};
+      for (const st of INITIAL_STATES_BRASIL) {
+        nameToCode[normalize(st.name)] = st.code;
+      }
+      const norm = normalize(codeCandidate);
+      codeCandidate = nameToCode[norm] || codeCandidate;
+    }
+
+    // Tenta por código ou por nome (insensitive)
+    const state = await this.prisma.state.findFirst({
+      where: {
+        countryId,
+        OR: [
+          { code: codeCandidate },
+          { name: { equals: input, mode: 'insensitive' } }
+        ]
+      }
+    });
+
+    if (state) {
+      this.stateCache.set(cacheKey, state.id);
+      return state.id;
+    }
+
+    return null;
+  }
+
+  /**
+   * Resolve ou cria produto por código (com cache)
+   */
+  private async resolveProduct(productCode: string, description?: string): Promise<number> {
+    if (this.productCache.has(productCode)) {
+      return this.productCache.get(productCode)!;
+    }
+
+    let product = await this.prisma.product.findUnique({
+      where: { code: productCode }
+    });
+
+    if (!product) {
+      product = await this.prisma.product.create({
+        data: {
+          code: productCode,
+          description: description || productCode,
+          commercialDesc: description,
+        }
+      });
+    }
+
+    this.productCache.set(productCode, product.id);
+    return product.id;
+  }
+
+  /**
+   * Resolve ou cria empresa por documento e país (com cache)
+   */
+  private async resolveCompany(document: string, name: string, countryId: number): Promise<number> {
+    // Sanitização de documento e nome segundo limites do schema
+    const sanitizeDocument = (doc: string) => {
+      const digits = (doc || '').replace(/\D+/g, '');
+      const alnum = digits || (doc || '').replace(/[^A-Za-z0-9]/g, '');
+      const result = (alnum || 'UNKNOWN').slice(0, 50);
+      return result || 'UNKNOWN';
+    };
+    const sanitizeName = (nm: string, fallbackDoc: string) => {
+      const base = (nm || '').trim() || fallbackDoc || 'UNKNOWN';
+      return base.length > 500 ? base.slice(0, 500) : base;
+    };
+
+    const docSan = sanitizeDocument(document);
+    const nameSan = sanitizeName(name, docSan);
+
+    const cacheKey = `${docSan}-${countryId}`;
+    if (this.companyCache.has(cacheKey)) {
+      return this.companyCache.get(cacheKey)!;
+    }
+
+    let company = await this.prisma.company.findFirst({
+      where: { document: docSan, countryId }
+    });
+
+    if (!company) {
+      company = await this.prisma.company.create({
+        data: {
+          document: docSan,
+          name: nameSan,
+          countryId,
+          type: 'IMPORTER',
+        }
+      });
+    }
+
+    this.companyCache.set(cacheKey, company.id);
+    return company.id;
+  }
+
+  /**
+   * Resolve país de origem por nome/código
+   */
+  private async resolveOriginCountry(originCountry: string): Promise<number | null> {
+    if (!originCountry) return null;
+    const trimmed = (originCountry || '').trim();
+    if (trimmed === '' || trimmed === '0' || trimmed === '00') {
+      return null;
+    }
+
+    // Mapeamento de nomes para códigos
+    const countryMapping: { [key: string]: string } = {
+      'CHINA': 'CN',
+      'ESTADOS UNIDOS': 'US',
+      'ALEMANHA': 'DE',
+      'JAPAO': 'JP',
+      'COREIA DO SUL': 'KR',
+      // Adicionar mais mapeamentos conforme necessário
+    };
+
+    const countryCode = countryMapping[originCountry.toUpperCase()] || originCountry;
+
+    try {
+      return await this.resolveCountry(countryCode);
+    } catch {
+      // Se não encontrar, criar país genérico
+      const country = await this.prisma.country.upsert({
+        where: { code: countryCode.substring(0, 2).toUpperCase() },
+        update: {},
+        create: {
+          code: countryCode.substring(0, 2).toUpperCase(),
+          name: originCountry,
+          fullName: originCountry,
+        }
+      });
+      return country.id;
+    }
+  }
+
+  /**
+   * Resolve ou cria agência por código e país (com cache)
+   */
+  private async resolveAgency(agencyCode?: string, countryId?: number): Promise<number | null> {
+    const code = (agencyCode || '').trim();
+    if (!code || !countryId) return null;
+    const cacheKey = `${code}-${countryId}`;
+    if (this.agencyCache.has(cacheKey)) {
+      return this.agencyCache.get(cacheKey)!;
+    }
+
+    let agency = await this.prisma.agency.findFirst({
+      where: { code, countryId }
+    });
+
+    if (!agency) {
+      agency = await this.prisma.agency.create({
+        data: {
+          code,
+          name: code,
+          countryId,
+        }
+      });
+    }
+
+    this.agencyCache.set(cacheKey, agency.id);
+    return agency.id;
+  }
+
+  /**
+   * Processa dados de qualquer país baseado no JSON de resposta dos robôs
+   */
+  async processRobotResponse(jsonResponse: any): Promise<void> {
+    const { descricao, total, resultados } = jsonResponse;
+
+    console.log(`Processando resposta: ${descricao}`);
+    console.log(`Total de registros: ${total}`);
+
+    if (!resultados || !Array.isArray(resultados)) {
+      throw new Error('Formato de resposta inválido');
+    }
+
+    // Detectar país baseado no primeiro registro
+    const firstRecord = resultados[0];
+    if (!firstRecord || !firstRecord.country_code) {
+      throw new Error('Não foi possível detectar o país dos dados');
+    }
+
+    const countryCode = firstRecord.country_code;
+
+    // Processar baseado no país
+    switch (countryCode) {
+      case 'BR':
+        await this.processBrasilData(resultados as BrasilRawData[]);
+        break;
+      case 'PE':
+        await this.processPeruData(resultados as PeruRawData[]);
+        break;
+      case 'CL':
+        await this.processChileData(resultados as ChileRawData[]);
+        break;
+      default:
+        throw new Error(`País não suportado: ${countryCode}`);
+    }
+
+    // Registrar execução da consulta
+    await this.prisma.queryExecution.create({
+      data: {
+        countryCode,
+        queryType: 'IMPORT',
+        parameters: { descricao },
+        totalRecords: total,
+        executionTime: 0, // Será calculado pela API
+        status: 'SUCCESS',
+      }
+    });
+  }
+
+  /**
+   * Limpa caches
+   */
+  clearCaches(): void {
+    this.countryCache.clear();
+    this.stateCache.clear();
+    this.productCache.clear();
+    this.companyCache.clear();
+  }
+
+  /**
+   * Fecha conexão com o banco
+   */
+  async disconnect(): Promise<void> {
+    await this.prisma.$disconnect();
+  }
+}
