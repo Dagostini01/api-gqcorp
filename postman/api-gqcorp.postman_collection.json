@@ -285,7 +285,7 @@
           ]
         },
         {
-          "name": "POST /peru/cnpj_peru/nome (atualizar nome_ruc)",
+          "name": "POST /peru/cnpj_peru/nome (atualizar nome_fantasia por RUC)",
           "request": {
             "method": "POST",
             "header": [
@@ -293,7 +293,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"id\": 1,\n  \"nome_ruc\": \"ACME Peru\"\n}"
+              "raw": "{\n  \"ruc\": \"20100860351\",\n  \"nome\": \"ACME Peru\"\n}"
             },
             "url": {
               "raw": "http://localhost:3000/peru/cnpj_peru/nome",
@@ -312,11 +312,11 @@
                   "pm.test('Status code is 200', function () {",
                   "  pm.response.to.have.status(200);",
                   "});",
-                  "pm.test('Response has id, ruc and nome_ruc', function () {",
+                  "pm.test('Response has id, ruc e nome_fantasia', function () {",
                   "  var json = pm.response.json();",
                   "  pm.expect(json).to.have.property('id');",
                   "  pm.expect(json).to.have.property('ruc');",
-                  "  pm.expect(json).to.have.property('nome_ruc');",
+                  "  pm.expect(json).to.have.property('nome_fantasia');",
                   "});"
                 ]
               }
@@ -367,15 +367,15 @@
           ]
         },
         {
-          "name": "GET /chile/importar",
+          "name": "GET /chile",
           "request": {
             "method": "GET",
             "url": {
-              "raw": "http://localhost:3000/chile/importar?ano=2025&mes=1&limit=20",
+              "raw": "http://localhost:3000/chile?ano=2025&mes=1&limit=20",
               "protocol": "http",
               "host": ["localhost"],
               "port": "3000",
-              "path": ["chile", "importar"],
+              "path": ["chile"],
               "query": [
                 { "key": "ano", "value": "2025" },
                 { "key": "mes", "value": "1" },

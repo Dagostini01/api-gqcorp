@@ -55,7 +55,7 @@ const chileRoutes: FastifyPluginAsync = async (app: FastifyInstance) => {
   });
 
   // GET /chile/importar -> retorna JSON igual ao POST, mas vindo do BD (paginação/opcional limit)
-  app.get('/importar', {
+  app.get('/', {
     schema: {
       querystring: {
         type: 'object',
@@ -66,7 +66,7 @@ const chileRoutes: FastifyPluginAsync = async (app: FastifyInstance) => {
           page: { type: 'integer', minimum: 1 },
           pageSize: { type: 'integer', minimum: 1, maximum: 200 },
         },
-        required: ['ano', 'mes'],
+        // ano/mes agora são opcionais; se ausentes, usamos o último período disponível
         additionalProperties: false,
       },
     },
@@ -81,9 +81,27 @@ const chileRoutes: FastifyPluginAsync = async (app: FastifyInstance) => {
         return reply.code(404).send({ error: 'country_not_found', detail: 'CL' });
       }
 
-      // Período
-      const start = new Date(Number(ano), Number(mes) - 1, 1);
-      const end = new Date(Number(ano), Number(mes), 0);
+      // Período: se ano/mes não informados, usar último período disponível (ou mês atual)
+      let anoNum = (typeof ano === 'number' && ano >= 1900 && ano <= 2100) ? Number(ano) : NaN;
+      let mesNum = (typeof mes === 'number' && mes >= 1 && mes <= 12) ? Number(mes) : NaN;
+      if (!Number.isFinite(anoNum) || !Number.isFinite(mesNum)) {
+        const latest = await prisma.import.findFirst({
+          where: { countryId: country.id, rawData: { not: Prisma.DbNull } },
+          orderBy: { operationDate: 'desc' },
+          select: { operationDate: true },
+        });
+        if (latest?.operationDate) {
+          const d = new Date(latest.operationDate);
+          anoNum = d.getUTCFullYear();
+          mesNum = d.getUTCMonth() + 1;
+        } else {
+          const now = new Date();
+          anoNum = now.getUTCFullYear();
+          mesNum = now.getUTCMonth() + 1;
+        }
+      }
+      const start = new Date(anoNum, mesNum - 1, 1);
+      const end = new Date(anoNum, mesNum, 0);
 
       // Buscar imports com rawData salvo
       const pageNum = (typeof page === 'number' && page > 0) ? Math.floor(page) : 1;
@@ -112,8 +130,8 @@ const chileRoutes: FastifyPluginAsync = async (app: FastifyInstance) => {
         return {
           ...rawData,
           country_code: 'CL',
-          ano_ref: String((rawData as any).ano_ref ?? ano),
-          mes_ref: String((rawData as any).mes_ref ?? mes),
+          ano_ref: String((rawData as any).ano_ref ?? anoNum),
+          mes_ref: String((rawData as any).mes_ref ?? mesNum),
         };
       });
       const total = periodTotal;
@@ -121,8 +139,8 @@ const chileRoutes: FastifyPluginAsync = async (app: FastifyInstance) => {
       await prisma.$disconnect();
 
       // Montar descrição igual ao robô
-      const firstDay = `${String(ano)}-${String(mes).padStart(2, '0')}-01`;
-      const lastDay = `${String(ano)}-${String(mes).padStart(2, '0')}-${String(end.getDate()).padStart(2, '0')}`;
+      const firstDay = `${String(anoNum)}-${String(mesNum).padStart(2, '0')}-01`;
+      const lastDay = `${String(anoNum)}-${String(mesNum).padStart(2, '0')}-${String(end.getDate()).padStart(2, '0')}`;
       const limTag = (typeof limit === 'number') ? ` (limitado a ${limit})` : '';
       const descricao = `Foram encontradas ${total} importações no período de ${firstDay} a ${lastDay}${limTag}`;
 

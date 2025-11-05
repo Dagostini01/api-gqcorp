@@ -249,40 +249,43 @@ const peruRoutes: FastifyPluginAsync = async (app: FastifyInstance) => {
     }
   });
 
-  // POST /peru/cnpj_peru/nome -> atualiza o nome_ruc para um RUC salvo
-  app.post<{ Body: { id: number; nome_ruc: string } }>('/cnpj_peru/nome', {
-    schema: {
-      body: {
-        type: 'object',
-        properties: {
-          id: { type: 'integer', minimum: 1 },
-          nome_ruc: { type: 'string' },
+  // POST /peru/cnpj_peru/nome -> atualiza nome_fantasia filtrando por RUC
+  app.post<{ Body: { ruc: string; nome: string } }>(
+    '/cnpj_peru/nome',
+    {
+      schema: {
+        body: {
+          type: 'object',
+          properties: {
+            ruc: { type: 'string', minLength: 5 },
+            nome: { type: 'string' },
+          },
+          required: ['ruc', 'nome'],
+          additionalProperties: false,
         },
-        required: ['id', 'nome_ruc'],
-        additionalProperties: false,
       },
     },
-  }, async (request, reply) => {
-    const prisma = new PrismaClient();
-    try {
-      const { id, nome_ruc } = request.body;
-      const updated = await prisma.cnpjPeru.update({
-        where: { id },
-        data: { nome_ruc },
-      });
-      await prisma.$disconnect();
+    async (request, reply) => {
+      const prisma = new PrismaClient();
       reply.header('Content-Type', 'application/json; charset=utf-8');
-      return reply.code(200).send({ id: updated.id, ruc: updated.ruc, nome_ruc: updated.nome_ruc });
-    } catch (err: any) {
-      await prisma.$disconnect();
-      // Registro não encontrado
-      if (err?.code === 'P2025') {
-        return reply.code(404).send({ error: 'ruc_not_found', detail: 'ID de RUC não encontrado' });
+      try {
+        const { ruc, nome } = request.body || ({} as any);
+        const updated = await prisma.cnpjPeru.update({
+          where: { ruc },
+          data: { nome_fantasia: nome } as any,
+        });
+        await prisma.$disconnect();
+        return reply.code(200).send({ id: updated.id, ruc: updated.ruc, nome_fantasia: (updated as any).nome_fantasia });
+      } catch (err: any) {
+        await prisma.$disconnect();
+        if (err?.code === 'P2025') {
+          return reply.code(404).send({ error: 'ruc_not_found', detail: 'RUC não encontrado' });
+        }
+        request.log.error({ err }, 'Falha ao atualizar nome_fantasia por RUC em cnpj_peru');
+        return reply.code(500).send({ error: 'update_nome_fantasia_failed', detail: err?.message });
       }
-      request.log.error({ err }, 'Falha ao atualizar nome_ruc em cnpj_peru');
-      return reply.code(500).send({ error: 'update_nome_ruc_failed', detail: err?.message });
     }
-  });
+  );
 
   // GET /peru/cnpj_peru -> lista RUCs salvos (sem repetição) com paginação e busca
   app.get<{ Querystring: { page?: number; pageSize?: number; q?: string } }>(
@@ -313,6 +316,7 @@ const peruRoutes: FastifyPluginAsync = async (app: FastifyInstance) => {
           where.OR = [
             { ruc: { contains: q.trim(), mode: 'insensitive' } },
             { nome_ruc: { contains: q.trim(), mode: 'insensitive' } },
+            { nome_fantasia: { contains: q.trim(), mode: 'insensitive' } },
           ];
         }
 
@@ -331,7 +335,7 @@ const peruRoutes: FastifyPluginAsync = async (app: FastifyInstance) => {
           page: pageNum,
           pageSize: take,
           totalPages: Math.max(1, Math.ceil(total / take)),
-          resultados: rows.map(r => ({ id: r.id, ruc: r.ruc, nome_ruc: r.nome_ruc, createdAt: r.createdAt, updatedAt: r.updatedAt })),
+          resultados: rows.map(r => ({ id: r.id, ruc: r.ruc, nome_ruc: r.nome_ruc, nome_fantasia: (r as any).nome_fantasia, createdAt: r.createdAt, updatedAt: r.updatedAt })),
         });
       } catch (err: any) {
         await prisma.$disconnect();
