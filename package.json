@@ -13,8 +13,11 @@
   "dependencies": {
     "@fastify/cors": "^8.5.0",
     "@prisma/client": "^6.18.0",
+    "@types/jsonwebtoken": "^9.0.10",
     "fastify": "^4.27.2",
-    "prisma": "^6.18.0"
+    "jsonwebtoken": "^9.0.2",
+    "prisma": "^6.18.0",
+    "twilio": "^5.10.4"
   },
   "devDependencies": {
     "@types/node": "^20.11.30",

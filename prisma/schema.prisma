@@ -241,9 +241,26 @@ model AppUser {
   id            Int      @id @default(autoincrement())
   email         String   @unique @db.VarChar(255)
   name          String?  @db.VarChar(255)
+  phone         String?  @db.VarChar(20)
   passwordHash  String   @db.VarChar(255)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
+  otpRequests   PasswordResetOTP[]
+
   @@map("app_users")
+}
+
+model PasswordResetOTP {
+  id         Int      @id @default(autoincrement())
+  userId     Int
+  user       AppUser  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  codeHash   String   @db.VarChar(255)
+  expiresAt  DateTime
+  attempts   Int      @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([userId])
+  @@map("password_reset_otps")
 }
